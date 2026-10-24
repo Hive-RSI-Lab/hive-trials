@@ -51,6 +51,11 @@ func TestCount(t *testing.T) {
 			input:    "!!! ??? ...",
 			expected: map[string]int{},
 		},
+		{
+			name:     "unicode letters",
+			input:    "Café, CAFÉ naïve",
+			expected: map[string]int{"café": 2, "naïve": 1},
+		},
 	}
 
 	for _, tt := range tests {

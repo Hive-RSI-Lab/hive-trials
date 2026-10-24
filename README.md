@@ -20,11 +20,3 @@ counts := wc.Count("Hello, WORLD! hello?")
 ```bash
 go test ./wc/...
 ```
-
-### Running the package
-
-```bash
-go run -mod=mod ./wc/
-```
-
-(Note: This is a library package; add a `main` package to use it as a CLI.)

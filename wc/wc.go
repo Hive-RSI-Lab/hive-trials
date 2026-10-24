@@ -1,25 +1,23 @@
 package wc
 
 import (
-	"regexp"
 	"strings"
+	"unicode"
 )
 
+// Count returns a map of word frequencies in s.
+// Words are lower-cased and split on non-letters (Unicode-aware).
 func Count(s string) map[string]int {
-	// Lowercase the string
-	s = strings.ToLower(s)
-	
-	// Split on non-letters
-	re := regexp.MustCompile(`[^a-z]+`)
-	words := re.Split(s, -1)
-	
+	// Split on non-letters using Unicode-aware function
+	words := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !unicode.IsLetter(r)
+	})
+
 	// Count words
 	counts := make(map[string]int)
 	for _, word := range words {
-		if word != "" {
-			counts[word]++
-		}
+		counts[word]++
 	}
-	
+
 	return counts
 }
