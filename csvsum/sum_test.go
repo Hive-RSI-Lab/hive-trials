@@ -5,45 +5,56 @@ import (
     "testing"
 )
 
-func TestSum_Normal(t *testing.T) {
-    csvData := "name,age,score\nAlice,30,10.5\nBob,25,20\nCarol,22,5.5"
-    r := strings.NewReader(csvData)
-    s, err := Sum(r, "score")
-    if err != nil {
-        t.Fatalf("unexpected error: %v", err)
-    }
-    expected := 36.0 // 10.5+20+5.5
-    if s != expected {
-        t.Fatalf("expected %v, got %v", expected, s)
-    }
+type sumTestCase struct {
+    name       string
+    csvData    string
+    column     string
+    wantSum    float64
+    wantErr    bool
 }
 
-func TestSum_MissingColumn(t *testing.T) {
-    csvData := "name,age\nAlice,30\nBob,25"
-    r := strings.NewReader(csvData)
-    _, err := Sum(r, "score")
-    if err == nil {
-        t.Fatalf("expected error for missing column")
+func TestSum(t *testing.T) {
+    cases := []sumTestCase{
+        {
+            name:    "normal",
+            csvData: "name,age,score\nAlice,30,10.5\nBob,25,20\nCarol,22,5.5",
+            column:  "score",
+            wantSum: 36.0,
+            wantErr: false,
+        },
+        {
+            name:    "missing column",
+            csvData: "name,age\nAlice,30\nBob,25",
+            column:  "score",
+            wantSum: 0,
+            wantErr: true,
+        },
+        {
+            name:    "bad number",
+            csvData: "name,score\nAlice,ten\nBob,20",
+            column:  "score",
+            wantSum: 0,
+            wantErr: true,
+        },
+        {
+            name:    "empty file",
+            csvData: "",
+            column:  "score",
+            wantSum: 0,
+            wantErr: false,
+        },
+    }
+
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            r := strings.NewReader(tc.csvData)
+            got, err := Sum(r, tc.column)
+            if (err != nil) != tc.wantErr {
+                t.Fatalf("unexpected error status: %v, want error: %v", err, tc.wantErr)
+            }
+            if !tc.wantErr && got != tc.wantSum {
+                t.Fatalf("expected sum %v, got %v", tc.wantSum, got)
+            }
+        })
     }
 }
-
-func TestSum_BadNumber(t *testing.T) {
-    csvData := "name,score\nAlice,ten\nBob,20"
-    r := strings.NewReader(csvData)
-    _, err := Sum(r, "score")
-    if err == nil {
-        t.Fatalf("expected error for non‑numeric value")
-    }
-}
-
-func TestSum_EmptyFile(t *testing.T) {
-    r := strings.NewReader("")
-    s, err := Sum(r, "score")
-    if err != nil {
-        t.Fatalf("unexpected error on empty file: %v", err)
-    }
-    if s != 0 {
-        t.Fatalf("expected sum 0 for empty file, got %v", s)
-    }
-}
-

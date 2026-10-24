@@ -6,8 +6,9 @@ A tiny Go module that provides a function to sum numeric values from a specific 
 
 ```go
 import (
+    "fmt"
     "os"
-    "example.com/csvsum"
+    "example.com/csvsum/csvsum"
 )
 
 func main() {
@@ -21,7 +22,7 @@ func main() {
 }
 ```
 
-The `Sum` function reads the CSV, expects a header row, and returns the sum of all numeric values in the named column. It returns an error if the column is missing or contains non‑numeric data.
+The `Sum` function reads the CSV, expects a header row, and returns the sum of all numeric values in the named column. Empty cells are treated as zero. It returns an error if the column is missing or contains non‑numeric data.
 
 ## Tests
 
