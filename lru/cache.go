@@ -9,14 +9,12 @@ import (
 // Clock is an interface for time operations, allowing injection for testing.
 type Clock interface {
 	Now() time.Time
-	After(d time.Duration) <-chan time.Time
 }
 
 // RealClock is the default implementation using time.Time.
 type RealClock struct{}
 
-func (RealClock) Now() time.Time            { return time.Now() }
-func (RealClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
+func (RealClock) Now() time.Time { return time.Now() }
 
 // entry holds a key-value pair with expiration time.
 type entry struct {
@@ -78,7 +76,7 @@ func (c *Cache) Get(key string) (value any, ok bool) {
 
 // Set adds or updates a value in the cache.
 // If the key exists, it updates the value and moves to front.
-// If at capacity, evicts the least recently used entry (expired entries are removed first).
+// If at capacity, evicts expired entries first, then the least recently used entry.
 func (c *Cache) Set(key string, value any) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -94,11 +92,6 @@ func (c *Cache) Set(key string, value any) {
 		return
 	}
 
-	// Clean up expired entries before adding new one
-	if c.ttl > 0 {
-		c.removeExpiredLocked()
-	}
-
 	// Add new entry
 	ent := &entry{
 		key:   key,
@@ -111,23 +104,31 @@ func (c *Cache) Set(key string, value any) {
 	elem := c.list.PushFront(ent)
 	c.index[key] = elem
 
-	// Evict if over capacity
+	// Evict if over capacity (clean up expired first, then LRU)
 	if c.list.Len() > c.capacity {
-		c.evictLRU()
+		c.evictIfNeededLocked()
 	}
 }
 
-// removeExpiredLocked removes all expired entries from the cache.
+// evictIfNeededLocked removes expired entries first, then LRU if still over capacity.
 // Must be called with c.mu held.
-func (c *Cache) removeExpiredLocked() {
-	now := c.clock.Now()
-	for elem := c.list.Back(); elem != nil; {
-		ent := elem.Value.(*entry)
-		next := elem.Prev()
-		if now.After(ent.expiresAt) {
-			c.removeElement(elem)
+func (c *Cache) evictIfNeededLocked() {
+	// First, remove expired entries
+	if c.ttl > 0 {
+		now := c.clock.Now()
+		for elem := c.list.Back(); elem != nil; {
+			ent := elem.Value.(*entry)
+			next := elem.Prev()
+			if now.After(ent.expiresAt) {
+				c.removeElement(elem)
+			}
+			elem = next
 		}
-		elem = next
+	}
+
+	// If still over capacity, evict LRU
+	if c.list.Len() > c.capacity {
+		c.evictLRU()
 	}
 }
 

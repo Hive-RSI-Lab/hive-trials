@@ -13,7 +13,7 @@ A thread-safe LRU (Least Recently Used) cache with TTL (Time To Live) expiration
 ## Installation
 
 ```bash
-go get github.com/yourorg/trials/lru
+go get trials/lru
 ```
 
 ## Usage
@@ -77,7 +77,7 @@ Retrieves a value from the cache. Returns the value and `true` if found and not 
 
 ### `Set(key string, value any)`
 
-Adds or updates a value in the cache. If the key exists, updates the value and resets its TTL. If at capacity, evicts the least recently used entry (after cleaning up expired entries).
+Adds or updates a value in the cache. If the key exists, updates the value and resets its TTL. If at capacity, evicts expired entries first, then the least recently used entry.
 
 ### `Len() int`
 
@@ -88,13 +88,12 @@ Returns the current number of entries in the cache.
 ```go
 type Clock interface {
 	Now() time.Time
-	After(d time.Duration) <-chan time.Time
 }
 ```
 
 Implement this interface to provide a custom time source for testing.
 
-### `NewFakeClock(start time.Time) *fakeClock` (for testing)
+### `NewFakeClock(start time.Time) *FakeClock` (for testing)
 
 Creates a controllable clock for testing time-based behavior.
 
@@ -114,7 +113,3 @@ Run tests with race detection:
 ```bash
 go test -race ./lru/...
 ```
-
-## License
-
-MIT
