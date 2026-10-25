@@ -1,3 +1,3 @@
-module example.com/csvsum
+module trials
 
-go 1.23
+go 1.22

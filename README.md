@@ -1,14 +1,18 @@
-# CSV Column Summer
+# trials
+
+A scratch project for trying models and harnesses on small real tasks before routing real work to them.
+
+## CSV Column Summer (csvsum)
 
 A tiny Go module that provides a function to sum numeric values from a specific column in a CSV file.
 
-## Usage
+### Usage
 
 ```go
 import (
     "fmt"
     "os"
-    "example.com/csvsum/csvsum"
+    "trials/csvsum"
 )
 
 func main() {
@@ -28,12 +32,9 @@ The `Sum` function reads the CSV, expects a header row, and returns the sum of a
 
 Run `go test ./...` to execute the test suite covering normal operation, missing column, bad number, and empty input.
 
-
-A scratch project for trying models and harnesses on small real tasks before routing real work to them.
-
 ## Word Counter (wc)
 
-A tiny Go package that counts words in a string, lower-casing and splitting on non-letters.
+A tiny Go package that counts words in a string, lower‑casing and splitting on non‑letters.
 
 ### Usage
 
