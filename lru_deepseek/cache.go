@@ -1,5 +1,5 @@
-// Package lru provides a concurrent-safe LRU cache with per-entry TTL.
-package lru
+// Package lru_deepseek provides a concurrent-safe LRU cache with per-entry TTL.
+package lru_deepseek
 
 import (
 	"container/list"
@@ -33,7 +33,8 @@ type Cache struct {
 }
 
 // New creates a Cache with the given capacity and TTL.
-// capacity must be at least 1; ttl must be positive.
+// capacity is clamped to at least 1.
+// ttl <= 0 means entries never expire.
 func New(capacity int, ttl time.Duration) *Cache {
 	if capacity < 1 {
 		capacity = 1
@@ -64,7 +65,7 @@ func (c *Cache) Get(key string) (any, bool) {
 		return nil, false
 	}
 	ent := elem.Value.(*entry)
-	if !c.clock.Now().Before(ent.expiry) {
+	if c.ttl > 0 && !c.clock.Now().Before(ent.expiry) {
 		c.removeElement(elem)
 		return nil, false
 	}
@@ -81,12 +82,17 @@ func (c *Cache) Set(key string, value any) {
 	if elem, ok := c.items[key]; ok {
 		ent := elem.Value.(*entry)
 		ent.value = value
-		ent.expiry = now.Add(c.ttl)
+		if c.ttl > 0 {
+			ent.expiry = now.Add(c.ttl)
+		}
 		c.ll.MoveToFront(elem)
 		return
 	}
 
-	ent := &entry{key: key, value: value, expiry: now.Add(c.ttl)}
+	ent := &entry{key: key, value: value}
+	if c.ttl > 0 {
+		ent.expiry = now.Add(c.ttl)
+	}
 	elem := c.ll.PushFront(ent)
 	c.items[key] = elem
 

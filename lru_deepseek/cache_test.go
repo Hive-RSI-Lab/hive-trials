@@ -1,4 +1,4 @@
-package lru
+package lru_deepseek
 
 import (
 	"fmt"
@@ -222,8 +222,8 @@ func TestSetEvictsExpiredOldest(t *testing.T) {
 	}
 }
 
-// TestExpiryAtBoundary verifies expiry exactly at the TTL boundary:
-// now >= expiry (i.e. !now.Before(expiry)) means expired.
+// TestExpiryAtBoundary verifies expiry exactly at the TTL boundry:
+// now >= expiry (ie !now.Before(expiry)) means expired.
 func TestExpiryAtBoundary(t *testing.T) {
 	c := New(10, time.Second)
 	clk := newFakeClock()
@@ -234,6 +234,27 @@ func TestExpiryAtBoundary(t *testing.T) {
 
 	if _, ok := c.Get("a"); ok {
 		t.Error("expected a to be expired exactly at TTL")
+	}
+}
+
+// TestTTLZeroMeansNoExpiry verifies that ttl <= 0 disables expiry.
+func TestTTLZeroMeansNoExpiry(t *testing.T) {
+	c := New(10, 0) // ttl = 0: no expiry
+	clk := newFakeClock()
+	c.SetClock(clk)
+
+	c.Set("a", 1)
+	clk.advance(24 * time.Hour) // far in the future
+	if v, ok := c.Get("a"); !ok || v != 1 {
+		t.Errorf("expected a=1 with ttl=0, got %v, ok=%v", v, ok)
+	}
+
+	// Also test negative TTL.
+	c2 := New(10, -time.Second)
+	c2.SetClock(newFakeClock())
+	c2.Set("b", 2)
+	if v, ok := c2.Get("b"); !ok || v != 2 {
+		t.Errorf("expected b=2 with negative ttl, got %v, ok=%v", v, ok)
 	}
 }
 
