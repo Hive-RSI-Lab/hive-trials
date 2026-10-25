@@ -42,15 +42,11 @@ type node struct {
 // New creates a new LRU cache with the given capacity and TTL.
 // If capacity <= 0, there is no capacity limit.
 // If ttl <= 0, entries do not expire.
-// The clock parameter allows injecting a test clock; pass nil to use the real clock.
-func New(capacity int, ttl time.Duration, clock Clock) *Cache {
-	if clock == nil {
-		clock = RealClock{}
-	}
+func New(capacity int, ttl time.Duration) *Cache {
 	c := &Cache{
 		capacity: capacity,
 		ttl:      ttl,
-		clock:    clock,
+		clock:    RealClock{},
 		items:    make(map[string]*node),
 	}
 	// Initialize sentinel nodes for the doubly linked list
@@ -59,6 +55,14 @@ func New(capacity int, ttl time.Duration, clock Clock) *Cache {
 	c.head.next = c.tail
 	c.tail.prev = c.head
 	return c
+}
+
+// setClockForTest sets the clock for testing purposes.
+// This is an unexported method used by in-package tests.
+func (c *Cache) setClockForTest(clock Clock) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.clock = clock
 }
 
 // Get retrieves a value from the cache.
@@ -119,6 +123,8 @@ func (c *Cache) Set(key string, value any) {
 }
 
 // Len returns the number of items in the cache.
+// Note: expired entries are counted until they are accessed (via Get)
+// or evicted during a Set operation.
 func (c *Cache) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

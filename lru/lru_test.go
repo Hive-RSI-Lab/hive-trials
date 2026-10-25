@@ -9,8 +9,8 @@ import (
 
 // fakeClock is a controllable clock for testing.
 type fakeClock struct {
-	mu   sync.Mutex
-	now  time.Time
+	mu  sync.Mutex
+	now time.Time
 }
 
 func (f *fakeClock) Now() time.Time {
@@ -50,7 +50,7 @@ func TestLRUEvictionOrder(t *testing.T) {
 				c.Set("a", 1)
 				c.Set("b", 2)
 				c.Set("c", 3)
-				c.Get("a") // access "a" - should become most recent
+				c.Get("a")    // access "a" - should become most recent
 				c.Set("d", 4) // should evict "b" (least recent)
 			},
 			wantKeys: []string{"d", "a", "c"},
@@ -81,7 +81,7 @@ func TestLRUEvictionOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := New(tt.capacity, 0, nil)
+			c := New(tt.capacity, 0)
 			tt.ops(c)
 
 			// Verify length
@@ -121,12 +121,60 @@ func TestLRUEvictionOrder(t *testing.T) {
 	}
 }
 
+func TestLRUEvictionOrderExact(t *testing.T) {
+	// Test exact LRU order by forcing evictions and checking which key is evicted
+	c := New(3, 0)
+	c.Set("a", 1)
+	c.Set("b", 2)
+	c.Set("c", 3)
+	// Order: c (MRU), b, a (LRU)
+
+	// Add d - should evict a
+	c.Set("d", 4)
+	if c.Len() != 3 {
+		t.Errorf("expected Len=3, got %d", c.Len())
+	}
+	_, ok := c.Get("a")
+	if ok {
+		t.Errorf("a should be evicted")
+	}
+
+	// Order now: d, c, b
+	// Access b - moves to front
+	c.Get("b")
+	// Order: b, d, c
+	// Add e - should evict c
+	c.Set("e", 5)
+	_, ok = c.Get("c")
+	if ok {
+		t.Errorf("c should be evicted")
+	}
+
+	// Order now: e, b, d
+	// Update d - moves to front
+	c.Set("d", 40)
+	// Order: d, e, b
+	// Add f - should evict b
+	c.Set("f", 6)
+	_, ok = c.Get("b")
+	if ok {
+		t.Errorf("b should be evicted")
+	}
+
+	// Final: f, d, e
+	for _, key := range []string{"f", "d", "e"} {
+		if _, ok := c.Get(key); !ok {
+			t.Errorf("%s should exist", key)
+		}
+	}
+}
+
 func TestTTLExpiry(t *testing.T) {
 	tests := []struct {
-		name     string
-		ttl      time.Duration
-		setup    func(*Cache, *fakeClock)
-		check    func(*testing.T, *Cache, *fakeClock)
+		name  string
+		ttl   time.Duration
+		setup func(*Cache, *fakeClock)
+		check func(*testing.T, *Cache, *fakeClock)
 	}{
 		{
 			name: "entry expires after TTL",
@@ -242,7 +290,8 @@ func TestTTLExpiry(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clk := &fakeClock{now: time.Now()}
-			c := New(10, tt.ttl, clk)
+			c := New(10, tt.ttl)
+			c.setClockForTest(clk)
 			tt.setup(c, clk)
 			tt.check(t, c, clk)
 		})
@@ -251,7 +300,7 @@ func TestTTLExpiry(t *testing.T) {
 
 func TestUpdateInPlace(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		setup func(*Cache)
 		check func(*testing.T, *Cache)
 	}{
@@ -314,7 +363,7 @@ func TestUpdateInPlace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := New(3, 0, nil)
+			c := New(3, 0)
 			tt.setup(c)
 			tt.check(t, c)
 		})
@@ -322,7 +371,7 @@ func TestUpdateInPlace(t *testing.T) {
 }
 
 func TestConcurrency(t *testing.T) {
-	c := New(100, time.Hour, nil)
+	c := New(100, time.Hour)
 	var wg sync.WaitGroup
 	numGoroutines := 50
 	opsPerGoroutine := 100
@@ -360,7 +409,7 @@ func TestConcurrency(t *testing.T) {
 }
 
 func TestConcurrentReadWrite(t *testing.T) {
-	c := New(1000, time.Hour, nil)
+	c := New(1000, time.Hour)
 	var wg sync.WaitGroup
 	numGoroutines := 100
 	opsPerGoroutine := 1000
@@ -394,7 +443,7 @@ func TestConcurrentReadWrite(t *testing.T) {
 }
 
 func TestCapacityZero(t *testing.T) {
-	c := New(0, 0, nil) // No capacity limit
+	c := New(0, 0) // No capacity limit
 	for i := 0; i < 1000; i++ {
 		c.Set(fmt.Sprintf("key-%d", i), i)
 	}
@@ -404,7 +453,7 @@ func TestCapacityZero(t *testing.T) {
 }
 
 func TestNegativeCapacity(t *testing.T) {
-	c := New(-1, 0, nil) // No capacity limit
+	c := New(-1, 0) // No capacity limit
 	for i := 0; i < 1000; i++ {
 		c.Set(fmt.Sprintf("key-%d", i), i)
 	}

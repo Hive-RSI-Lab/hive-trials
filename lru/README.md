@@ -7,13 +7,13 @@ A thread-safe LRU (Least Recently Used) cache with TTL (Time-To-Live) support fo
 - **LRU Eviction**: Automatically evicts least recently used items when capacity is reached
 - **TTL Support**: Entries expire after a configurable time-to-live
 - **Thread-Safe**: Safe for concurrent use with `sync.RWMutex`
-- **Injectable Clock**: Test-friendly design with injectable clock interface
+- **Test-Friendly**: Internal clock can be replaced for testing
 - **Zero Dependencies**: Standard library only
 
 ## Installation
 
 ```bash
-go get github.com/yourusername/trials/lru
+go get trials/lru
 ```
 
 ## Usage
@@ -24,12 +24,12 @@ package main
 import (
 	"fmt"
 	"time"
-	"github.com/yourusername/trials/lru"
+	"trials/lru"
 )
 
 func main() {
 	// Create a cache with capacity 100 and 5-minute TTL
-	cache := lru.New(100, 5*time.Minute, nil)
+	cache := lru.New(100, 5*time.Minute)
 
 	// Set a value
 	cache.Set("key", "value")
@@ -44,46 +44,18 @@ func main() {
 }
 ```
 
-### With Custom Clock (for Testing)
+### Testing with Custom Clock
 
-```go
-import (
-	"time"
-	"github.com/yourusername/trials/lru"
-)
-
-type fakeClock struct {
-	now time.Time
-}
-
-func (f *fakeClock) Now() time.Time {
-	return f.now
-}
-
-func (f *fakeClock) Advance(d time.Duration) {
-	f.now = f.now.Add(d)
-}
-
-func main() {
-	clk := &fakeClock{now: time.Now()}
-	cache := lru.New(100, time.Hour, clk)
-
-	cache.Set("key", "value")
-	clk.Advance(2 * time.Hour)
-	// Key is now expired
-	val, ok := cache.Get("key") // ok == false
-}
-```
+The package uses an internal clock that can be replaced in tests via an unexported method. See `lru_test.go` for examples.
 
 ## API
 
-### `New(capacity int, ttl time.Duration, clock Clock) *Cache`
+### `New(capacity int, ttl time.Duration) *Cache`
 
 Creates a new LRU cache.
 
 - `capacity`: Maximum number of entries. Use `<= 0` for unlimited capacity.
 - `ttl`: Time-to-live for entries. Use `<= 0` for no expiration.
-- `clock`: Clock implementation for time. Pass `nil` to use real time.
 
 ### `Get(key string) (any, bool)`
 
@@ -96,6 +68,8 @@ Adds or updates a value in the cache. If the key exists, updates its value and m
 ### `Len() int`
 
 Returns the current number of entries in the cache.
+
+Note: expired entries are counted until they are accessed (via Get) or evicted during a Set operation.
 
 ## Running Tests
 
@@ -114,7 +88,7 @@ go vet ./lru
 
 The test suite covers:
 
-- **LRU Eviction Order**: Basic eviction, access updates recency, update-in-place updates recency
+- **LRU Eviction Order**: Basic eviction, access updates recency, update-in-place updates recency, exact order verification via forced evictions
 - **TTL Expiry**: Entry expiration, access does not reset TTL (TTL from creation), update resets TTL, zero TTL means no expiry, expired entries removed from cache
 - **Update In Place**: Updating existing keys keeps them in cache, update moves to front
 - **Concurrency**: Concurrent readers and writers, mixed read/write operations
