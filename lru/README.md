@@ -5,7 +5,7 @@ A concurrent-safe LRU cache with per-entry TTL, written in Go.
 ## Usage
 
 ```go
-import "github.com/Hive-RSI-Lab/trials/lru"
+import "trials/lru"
 
 // Create a cache that holds up to 100 entries, each expiring after 5 minutes.
 c := lru.New(100, 5*time.Minute)

@@ -1,3 +1,3 @@
-module github.com/Hive-RSI-Lab/trials
+module trials
 
-go 1.27.3
+go 1.23

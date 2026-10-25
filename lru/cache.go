@@ -64,7 +64,7 @@ func (c *Cache) Get(key string) (any, bool) {
 		return nil, false
 	}
 	ent := elem.Value.(*entry)
-	if c.clock.Now().After(ent.expiry) {
+	if !c.clock.Now().Before(ent.expiry) {
 		c.removeElement(elem)
 		return nil, false
 	}

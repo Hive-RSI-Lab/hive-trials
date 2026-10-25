@@ -75,8 +75,8 @@ func TestExpiry(t *testing.T) {
 	}
 }
 
-// TestExpiryEviction verifies expired entries don't count and are removed
-// lazily on access.
+// TestExpiryEviction verifies expired entries are removed lazily on access.
+// They still count toward Len until that access.
 func TestExpiryEviction(t *testing.T) {
 	c := New(2, time.Second)
 	clk := newFakeClock()
@@ -195,6 +195,45 @@ func TestZeroOrNegativeCapacity(t *testing.T) {
 	}
 	if v, ok := c.Get("b"); !ok || v != 2 {
 		t.Errorf("expected b=2, got %v, ok=%v", v, ok)
+	}
+}
+
+// TestSetEvictsExpiredOldest verifies Set evicts at capacity even when the
+// oldest entry has already expired.
+func TestSetEvictsExpiredOldest(t *testing.T) {
+	c := New(2, time.Second)
+	clk := newFakeClock()
+	c.SetClock(clk)
+
+	c.Set("a", 1)
+	c.Set("b", 2)
+	clk.advance(2 * time.Second) // both expired
+
+	// Set a new key — should evict the oldest (a) even though both are expired.
+	c.Set("c", 3)
+	if _, ok := c.Get("a"); ok {
+		t.Error("expected a to be evicted")
+	}
+	if _, ok := c.Get("b"); ok {
+		t.Error("expected b to be expired")
+	}
+	if v, ok := c.Get("c"); !ok || v != 3 {
+		t.Errorf("expected c=3, got %v, ok=%v", v, ok)
+	}
+}
+
+// TestExpiryAtBoundary verifies expiry exactly at the TTL boundary:
+// now >= expiry (i.e. !now.Before(expiry)) means expired.
+func TestExpiryAtBoundary(t *testing.T) {
+	c := New(10, time.Second)
+	clk := newFakeClock()
+	c.SetClock(clk)
+
+	c.Set("a", 1)
+	clk.advance(time.Second) // exactly at TTL boundary
+
+	if _, ok := c.Get("a"); ok {
+		t.Error("expected a to be expired exactly at TTL")
 	}
 }
 
