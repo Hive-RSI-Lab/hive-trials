@@ -12,9 +12,13 @@ A thread-safe LRU (Least Recently Used) cache with TTL (Time-To-Live) support fo
 
 ## Installation
 
-```bash
-go get trials/lru
+This module is part of the `trials` module. Import it as:
+
+```go
+import "trials/lru"
 ```
+
+(This requires working within the `trials` module or replacing the module path with your own.)
 
 ## Usage
 
@@ -63,13 +67,13 @@ Retrieves a value from the cache. Returns the value and `true` if found and not 
 
 ### `Set(key string, value any)`
 
-Adds or updates a value in the cache. If the key exists, updates its value and moves it to most recently used. If at capacity, evicts the least recently used entry.
+Adds or updates a value in the cache. If the key exists, updates its value and moves it to most recently used. If at capacity, first removes all expired entries, then evicts the least recently used entry if still over capacity.
 
 ### `Len() int`
 
-Returns the current number of entries in the cache.
+Returns the current number of entries in the cache (including expired entries that have not yet been accessed or evicted).
 
-Note: expired entries are counted until they are accessed (via Get) or evicted during a Set operation.
+Note: expired entries remain in the cache until they are accessed (via Get) or until they become the least-recently-used entry and are evicted during a Set operation when the cache is at capacity.
 
 ## Running Tests
 
