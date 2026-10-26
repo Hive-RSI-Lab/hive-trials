@@ -28,159 +28,278 @@ func newFakeClock() *fakeClock {
 	return &fakeClock{t: time.Unix(0, 0)}
 }
 
-// TestEvictionOrder verifies LRU eviction: the least-recently-used entry
-// is dropped when capacity is exceeded.
-func TestEvictionOrder(t *testing.T) {
-	c := New(3, time.Hour)
-	clk := newFakeClock()
-	c.SetClock(clk)
+// evictionTestCase groups LRU eviction scenarios.
+type evictionTestCase struct {
+	name        string
+	capacity    int
+	ttl         time.Duration
+	ops         func(c *Cache, clk *fakeClock)
+	want        map[string]any // key -> expected value
+	wantMissing []string       // keys that should not be present
+	wantLen     int            // expected Len() at end (optional, -1 to skip)
+}
 
-	c.Set("a", 1)
-	c.Set("b", 2)
-	c.Set("c", 3)
-	// a is now oldest, c newest. Access a to make it newest.
-	c.Get("a")
-	// Now b is oldest.
-	c.Set("d", 4) // capacity 3 exceeded, b should be evicted
+// evictionCases covers basic eviction, access updates recency,
+// update-in-place moves to front, and Set evicting expired oldest at capacity.
+var evictionCases = []evictionTestCase{
+	{
+		name:     "basic LRU eviction",
+		capacity: 3,
+		ttl:      time.Hour,
+		ops: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+			c.Set("b", 2)
+			c.Set("c", 3)
+			c.Get("a")    // a becomes most recent
+			c.Set("d", 4) // evicts b
+		},
+		want:        map[string]any{"a": 1, "c": 3, "d": 4},
+		wantMissing: []string{"b"},
+		wantLen:     3,
+	},
+	{
+		name:     "update moves entry to front",
+		capacity: 2,
+		ttl:      time.Hour,
+		ops: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+			c.Set("b", 2)
+			c.Set("a", 10) // update a; a moves to front, b is now oldest
+			c.Set("c", 3)  // should evict b
+		},
+		want:        map[string]any{"a": 10, "c": 3},
+		wantMissing: []string{"b"},
+		wantLen:     2,
+	},
+	{
+		name:     "Get refreshes position",
+		capacity: 3,
+		ttl:      time.Hour,
+		ops: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+			c.Set("b", 2)
+			c.Set("c", 3)
+			c.Get("a")    // a moves to front: a, c, b
+			c.Get("b")    // b moves to front: b, a, c
+			c.Set("d", 4) // evict c
+		},
+		want:        map[string]any{"a": 1, "b": 2, "d": 4},
+		wantMissing: []string{"c"},
+		wantLen:     3,
+	},
+	{
+		name:     "Set evicts expired oldest at capacity",
+		capacity: 2,
+		ttl:      time.Second,
+		ops: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+			c.Set("b", 2)
+			clk.advance(2 * time.Second) // both expired
+			c.Set("c", 3)                // should evict a (oldest) even though both expired
+		},
+		want:        map[string]any{"c": 3},
+		wantMissing: []string{"a", "b"},
+		wantLen:     1,
+	},
+	{
+		name:     "capacity one eviction",
+		capacity: 1,
+		ttl:      time.Hour,
+		ops: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+			c.Set("b", 2)
+		},
+		want:        map[string]any{"b": 2},
+		wantMissing: []string{"a"},
+		wantLen:     1,
+	},
+	{
+		name:     "Set prefers expired over live LRU when at capacity",
+		capacity: 2,
+		ttl:      time.Second,
+		ops: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1) // oldest, will expire
+			clk.advance(600 * time.Millisecond)
+			c.Set("b", 2)                       // newest, live
+			c.Get("a")                          // move a to front without refreshing expiry (a now front, b back)
+			clk.advance(600 * time.Millisecond) // a expired (1.2s total), b still live (0.6s total)
+			// List order: front=a(expired), back=b(live)
+			// Set(c) should evict expired a, not live b
+			c.Set("c", 3)
+		},
+		want:        map[string]any{"b": 2, "c": 3},
+		wantMissing: []string{"a"},
+		wantLen:     2,
+	},
+}
 
-	if _, ok := c.Get("b"); ok {
-		t.Error("expected b to be evicted")
-	}
-	if v, ok := c.Get("a"); !ok || v != 1 {
-		t.Errorf("expected a=1, got %v, ok=%v", v, ok)
-	}
-	if v, ok := c.Get("c"); !ok || v != 3 {
-		t.Errorf("expected c=3, got %v, ok=%v", v, ok)
-	}
-	if v, ok := c.Get("d"); !ok || v != 4 {
-		t.Errorf("expected d=4, got %v, ok=%v", v, ok)
+func TestEviction(t *testing.T) {
+	for _, tc := range evictionCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New(tc.capacity, tc.ttl)
+			clk := newFakeClock()
+			c.SetClock(clk)
+
+			tc.ops(c, clk)
+
+			for k, v := range tc.want {
+				if got, ok := c.Get(k); !ok || got != v {
+					t.Errorf("%s: Get(%q) = (%v, %v), want (%v, true)", tc.name, k, got, ok, v)
+				}
+			}
+			for _, k := range tc.wantMissing {
+				if _, ok := c.Get(k); ok {
+					t.Errorf("%s: expected %q to be missing, but it was present", tc.name, k)
+				}
+			}
+			if tc.wantLen >= 0 && c.Len() != tc.wantLen {
+				t.Errorf("%s: Len() = %d, want %d", tc.name, c.Len(), tc.wantLen)
+			}
+		})
 	}
 }
 
-// TestExpiry verifies entries expire after TTL.
+// expiryTestCase groups TTL expiry scenarios.
+type expiryTestCase struct {
+	name        string
+	capacity    int
+	ttl         time.Duration
+	setup       func(c *Cache, clk *fakeClock)
+	advance     time.Duration
+	want        map[string]any // expected present keys and values
+	wantMissing []string       // expected missing keys
+	wantLen     int            // expected Len() at end (optional, -1 to skip)
+}
+
+var expiryCases = []expiryTestCase{
+	{
+		name:     "entry expires after TTL",
+		capacity: 10,
+		ttl:      time.Second,
+		setup: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+		},
+		advance:     1100 * time.Millisecond,
+		want:        map[string]any{},
+		wantMissing: []string{"a"},
+		wantLen:     -1,
+	},
+	{
+		name:     "entry not expired before TTL",
+		capacity: 10,
+		ttl:      time.Second,
+		setup: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+		},
+		advance:     500 * time.Millisecond,
+		want:        map[string]any{"a": 1},
+		wantMissing: []string{},
+		wantLen:     -1,
+	},
+	{
+		name:     "exact at TTL boundary means expired",
+		capacity: 10,
+		ttl:      time.Second,
+		setup: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+		},
+		advance:     time.Second,
+		want:        map[string]any{},
+		wantMissing: []string{"a"},
+		wantLen:     -1,
+	},
+	{
+		name:     "Set on existing key refreshes TTL",
+		capacity: 10,
+		ttl:      time.Second,
+		setup: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+			clk.advance(900 * time.Millisecond)
+			c.Set("a", 2) // refresh expiry
+		},
+		advance:     500 * time.Millisecond, // 1.4s since first set, 0.5s since refresh
+		want:        map[string]any{"a": 2},
+		wantMissing: []string{},
+		wantLen:     -1,
+	},
+	{
+		name:     "refreshed entry eventually expires",
+		capacity: 10,
+		ttl:      time.Second,
+		setup: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+			clk.advance(900 * time.Millisecond)
+			c.Set("a", 2) // refresh expiry
+		},
+		advance:     1100 * time.Millisecond, // 1.1s since refresh
+		want:        map[string]any{},
+		wantMissing: []string{"a"},
+		wantLen:     -1,
+	},
+	{
+		name:     "lazy expiry removal on Get",
+		capacity: 2,
+		ttl:      time.Second,
+		setup: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+			c.Set("b", 2)
+			clk.advance(2 * time.Second) // both expired
+		},
+		advance:     0, // no additional advance; check after Get("a")
+		want:        map[string]any{},
+		wantMissing: []string{"a"},
+		wantLen:     1, // b still counted until accessed
+	},
+	{
+		name:     "ttl zero means no expiry",
+		capacity: 10,
+		ttl:      0,
+		setup: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)
+		},
+		advance:     24 * time.Hour,
+		want:        map[string]any{"a": 1},
+		wantMissing: []string{},
+		wantLen:     -1,
+	},
+	{
+		name:     "negative ttl means no expiry",
+		capacity: 10,
+		ttl:      -time.Second,
+		setup: func(c *Cache, clk *fakeClock) {
+			c.Set("b", 2)
+		},
+		advance:     24 * time.Hour,
+		want:        map[string]any{"b": 2},
+		wantMissing: []string{},
+		wantLen:     -1,
+	},
+}
+
 func TestExpiry(t *testing.T) {
-	c := New(10, time.Second)
-	clk := newFakeClock()
-	c.SetClock(clk)
+	for _, tc := range expiryCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New(tc.capacity, tc.ttl)
+			clk := newFakeClock()
+			c.SetClock(clk)
 
-	c.Set("a", 1)
-	clk.advance(500 * time.Millisecond)
-	if v, ok := c.Get("a"); !ok || v != 1 {
-		t.Errorf("expected a=1 at 0.5s, got %v, ok=%v", v, ok)
-	}
+			tc.setup(c, clk)
+			clk.advance(tc.advance)
 
-	clk.advance(600 * time.Millisecond) // total 1.1s > 1s TTL
-	if _, ok := c.Get("a"); ok {
-		t.Error("expected a to be expired after 1.1s")
-	}
-}
-
-// TestExpiryEviction verifies expired entries are removed lazily on access.
-// They still count toward Len until that access.
-func TestExpiryEviction(t *testing.T) {
-	c := New(2, time.Second)
-	clk := newFakeClock()
-	c.SetClock(clk)
-
-	c.Set("a", 1)
-	c.Set("b", 2)
-	clk.advance(2 * time.Second)
-
-	// Both are expired. Get on a should remove it, returning not found.
-	if _, ok := c.Get("a"); ok {
-		t.Error("expected a to be expired")
-	}
-	// Len still counts until evicted, but the expired entry is removed on Get.
-	// b is still in the list until accessed.
-	if c.Len() != 1 {
-		t.Errorf("expected Len=1 after a removed, got %d", c.Len())
-	}
-}
-
-// TestUpdate verifies Set on an existing key updates value and moves to front.
-func TestUpdate(t *testing.T) {
-	c := New(2, time.Hour)
-	clk := newFakeClock()
-	c.SetClock(clk)
-
-	c.Set("a", 1)
-	c.Set("b", 2)
-	c.Set("a", 10) // update a; a moves to front, b is now oldest.
-	c.Set("c", 3)  // should evict b
-
-	if _, ok := c.Get("b"); ok {
-		t.Error("expected b to be evicted")
-	}
-	if v, ok := c.Get("a"); !ok || v != 10 {
-		t.Errorf("expected a=10, got %v, ok=%v", v, ok)
-	}
-	if v, ok := c.Get("c"); !ok || v != 3 {
-		t.Errorf("expected c=3, got %v, ok=%v", v, ok)
-	}
-}
-
-// TestUpdateRefreshesExpiry verifies Set on an existing key refreshes its TTL.
-func TestUpdateRefreshesExpiry(t *testing.T) {
-	c := New(10, time.Second)
-	clk := newFakeClock()
-	c.SetClock(clk)
-
-	c.Set("a", 1)
-	clk.advance(900 * time.Millisecond)
-	c.Set("a", 2) // refresh expiry
-	clk.advance(500 * time.Millisecond) // total 1.4s since first set, 0.5s since refresh
-
-	if v, ok := c.Get("a"); !ok || v != 2 {
-		t.Errorf("expected a=2 after refresh, got %v, ok=%v", v, ok)
-	}
-
-	clk.advance(600 * time.Millisecond) // 1.1s since refresh
-	if _, ok := c.Get("a"); ok {
-		t.Error("expected a to be expired 1.1s after refresh")
-	}
-}
-
-// TestGetRefreshesPosition verifies Get moves the entry to the front.
-func TestGetRefreshesPosition(t *testing.T) {
-	c := New(3, time.Hour)
-	clk := newFakeClock()
-	c.SetClock(clk)
-
-	c.Set("a", 1)
-	c.Set("b", 2)
-	c.Set("c", 3)
-	// Access order: c(newest), b, a(oldest)
-	c.Get("a") // a moves to front: a(newest), c, b(oldest)
-	c.Get("b") // b moves to front: b(newest), a, c(oldest)
-	c.Set("d", 4) // evict c
-
-	if _, ok := c.Get("c"); ok {
-		t.Error("expected c to be evicted")
-	}
-	if v, ok := c.Get("a"); !ok || v != 1 {
-		t.Errorf("expected a=1, got %v, ok=%v", v, ok)
-	}
-	if v, ok := c.Get("b"); !ok || v != 2 {
-		t.Errorf("expected b=2, got %v, ok=%v", v, ok)
-	}
-}
-
-// TestCapacityOne verifies eviction with a capacity-1 cache.
-func TestCapacityOne(t *testing.T) {
-	c := New(1, time.Hour)
-	clk := newFakeClock()
-	c.SetClock(clk)
-
-	c.Set("a", 1)
-	if v, ok := c.Get("a"); !ok || v != 1 {
-		t.Errorf("expected a=1, got %v, ok=%v", v, ok)
-	}
-	c.Set("b", 2)
-	if _, ok := c.Get("a"); ok {
-		t.Error("expected a evicted")
-	}
-	if v, ok := c.Get("b"); !ok || v != 2 {
-		t.Errorf("expected b=2, got %v, ok=%v", v, ok)
+			for k, v := range tc.want {
+				if got, ok := c.Get(k); !ok || got != v {
+					t.Errorf("%s: Get(%q) = (%v, %v), want (%v, true)", tc.name, k, got, ok, v)
+				}
+			}
+			for _, k := range tc.wantMissing {
+				if _, ok := c.Get(k); ok {
+					t.Errorf("%s: expected %q to be missing, but it was present", tc.name, k)
+				}
+			}
+			if tc.wantLen >= 0 && c.Len() != tc.wantLen {
+				t.Errorf("%s: Len() = %d, want %d", tc.name, c.Len(), tc.wantLen)
+			}
+		})
 	}
 }
 
@@ -195,66 +314,6 @@ func TestZeroOrNegativeCapacity(t *testing.T) {
 	}
 	if v, ok := c.Get("b"); !ok || v != 2 {
 		t.Errorf("expected b=2, got %v, ok=%v", v, ok)
-	}
-}
-
-// TestSetEvictsExpiredOldest verifies Set evicts at capacity even when the
-// oldest entry has already expired.
-func TestSetEvictsExpiredOldest(t *testing.T) {
-	c := New(2, time.Second)
-	clk := newFakeClock()
-	c.SetClock(clk)
-
-	c.Set("a", 1)
-	c.Set("b", 2)
-	clk.advance(2 * time.Second) // both expired
-
-	// Set a new key — should evict the oldest (a) even though both are expired.
-	c.Set("c", 3)
-	if _, ok := c.Get("a"); ok {
-		t.Error("expected a to be evicted")
-	}
-	if _, ok := c.Get("b"); ok {
-		t.Error("expected b to be expired")
-	}
-	if v, ok := c.Get("c"); !ok || v != 3 {
-		t.Errorf("expected c=3, got %v, ok=%v", v, ok)
-	}
-}
-
-// TestExpiryAtBoundary verifies expiry exactly at the TTL boundry:
-// now >= expiry (ie !now.Before(expiry)) means expired.
-func TestExpiryAtBoundary(t *testing.T) {
-	c := New(10, time.Second)
-	clk := newFakeClock()
-	c.SetClock(clk)
-
-	c.Set("a", 1)
-	clk.advance(time.Second) // exactly at TTL boundary
-
-	if _, ok := c.Get("a"); ok {
-		t.Error("expected a to be expired exactly at TTL")
-	}
-}
-
-// TestTTLZeroMeansNoExpiry verifies that ttl <= 0 disables expiry.
-func TestTTLZeroMeansNoExpiry(t *testing.T) {
-	c := New(10, 0) // ttl = 0: no expiry
-	clk := newFakeClock()
-	c.SetClock(clk)
-
-	c.Set("a", 1)
-	clk.advance(24 * time.Hour) // far in the future
-	if v, ok := c.Get("a"); !ok || v != 1 {
-		t.Errorf("expected a=1 with ttl=0, got %v, ok=%v", v, ok)
-	}
-
-	// Also test negative TTL.
-	c2 := New(10, -time.Second)
-	c2.SetClock(newFakeClock())
-	c2.Set("b", 2)
-	if v, ok := c2.Get("b"); !ok || v != 2 {
-		t.Errorf("expected b=2 with negative ttl, got %v, ok=%v", v, ok)
 	}
 }
 
@@ -291,8 +350,8 @@ func TestConcurrent(t *testing.T) {
 	}
 
 	wg.Wait()
-	// If we reached here without a data race, the test passes.
-	if c.Len() < 0 {
-		t.Error("negative len")
+	// After all operations, Len should not exceed capacity.
+	if c.Len() > c.capacity {
+		t.Errorf("Len() = %d, want <= %d", c.Len(), c.capacity)
 	}
 }

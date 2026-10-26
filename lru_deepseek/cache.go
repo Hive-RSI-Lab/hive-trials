@@ -96,8 +96,35 @@ func (c *Cache) Set(key string, value any) {
 	elem := c.ll.PushFront(ent)
 	c.items[key] = elem
 
+	// When over capacity, sweep for an expired entry to evict first.
+	// This scans from the back (oldest) toward the front and removes
+	// the first expired entry found. If no expired entry exists,
+	// removeOldest evicts the LRU live entry.
 	if c.ll.Len() > c.capacity {
-		c.removeOldest()
+		c.sweepExpired(now)
+		if c.ll.Len() > c.capacity {
+			c.removeOldest()
+		}
+	}
+}
+
+// sweepExpired removes the oldest expired entry from the list if one exists,
+// preferring to evict expired entries over live ones when at capacity.
+// It scans from the back (oldest) toward the front and removes the first
+// expired entry found. If no expired entry exists, it does nothing and
+// the caller (Set) will evict the LRU live entry via removeOldest.
+func (c *Cache) sweepExpired(now time.Time) {
+	if c.ttl <= 0 {
+		return
+	}
+	for elem := c.ll.Back(); elem != nil; elem = elem.Prev() {
+		ent := elem.Value.(*entry)
+		if now.Before(ent.expiry) {
+			continue // this entry is still live, check older ones
+		}
+		// Found an expired entry; remove it and stop.
+		c.removeElement(elem)
+		return
 	}
 }
 
