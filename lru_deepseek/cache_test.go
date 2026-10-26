@@ -118,11 +118,13 @@ var evictionCases = []evictionTestCase{
 		capacity: 2,
 		ttl:      time.Second,
 		ops: func(c *Cache, clk *fakeClock) {
-			c.Set("a", 1)                // oldest, will expire
-			clk.advance(2 * time.Second) // a expired
-			c.Set("b", 2)                // newest, live (fresh expiry)
-			// a is expired at back, b is live at front
-			// Set should evict expired a, not live b
+			c.Set("a", 1) // oldest, will expire
+			clk.advance(600 * time.Millisecond)
+			c.Set("b", 2)                       // newest, live
+			c.Get("a")                          // move a to front without refreshing expiry (a now front, b back)
+			clk.advance(600 * time.Millisecond) // a expired (1.2s total), b still live (0.6s total)
+			// List order: front=a(expired), back=b(live)
+			// Set(c) should evict expired a, not live b
 			c.Set("c", 3)
 		},
 		want:        map[string]any{"b": 2, "c": 3},

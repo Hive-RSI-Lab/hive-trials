@@ -96,11 +96,15 @@ func (c *Cache) Set(key string, value any) {
 	elem := c.ll.PushFront(ent)
 	c.items[key] = elem
 
-	// Sweep expired entries from the back before evicting a live LRU entry.
-	c.sweepExpired(now)
-
+	// When over capacity, sweep for an expired entry to evict first.
+	// This scans from the back (oldest) toward the front and removes
+	// the first expired entry found. If no expired entry exists,
+	// removeOldest evicts the LRU live entry.
 	if c.ll.Len() > c.capacity {
-		c.removeOldest()
+		c.sweepExpired(now)
+		if c.ll.Len() > c.capacity {
+			c.removeOldest()
+		}
 	}
 }
 
