@@ -30,13 +30,13 @@ func newFakeClock() *fakeClock {
 
 // evictionTestCase groups LRU eviction scenarios.
 type evictionTestCase struct {
-	name       string
-	capacity   int
-	ttl        time.Duration
-	ops        func(c *Cache, clk *fakeClock)
-	want       map[string]any    // key -> expected value
-	wantMissing []string         // keys that should not be present
-	wantLen    int               // expected Len() at end (optional, -1 to skip)
+	name        string
+	capacity    int
+	ttl         time.Duration
+	ops         func(c *Cache, clk *fakeClock)
+	want        map[string]any // key -> expected value
+	wantMissing []string       // keys that should not be present
+	wantLen     int            // expected Len() at end (optional, -1 to skip)
 }
 
 // evictionCases covers basic eviction, access updates recency,
@@ -50,7 +50,7 @@ var evictionCases = []evictionTestCase{
 			c.Set("a", 1)
 			c.Set("b", 2)
 			c.Set("c", 3)
-			c.Get("a") // a becomes most recent
+			c.Get("a")    // a becomes most recent
 			c.Set("d", 4) // evicts b
 		},
 		want:        map[string]any{"a": 1, "c": 3, "d": 4},
@@ -79,8 +79,8 @@ var evictionCases = []evictionTestCase{
 			c.Set("a", 1)
 			c.Set("b", 2)
 			c.Set("c", 3)
-			c.Get("a") // a moves to front: a, c, b
-			c.Get("b") // b moves to front: b, a, c
+			c.Get("a")    // a moves to front: a, c, b
+			c.Get("b")    // b moves to front: b, a, c
 			c.Set("d", 4) // evict c
 		},
 		want:        map[string]any{"a": 1, "b": 2, "d": 4},
@@ -95,7 +95,7 @@ var evictionCases = []evictionTestCase{
 			c.Set("a", 1)
 			c.Set("b", 2)
 			clk.advance(2 * time.Second) // both expired
-			c.Set("c", 3) // should evict a (oldest) even though both expired
+			c.Set("c", 3)                // should evict a (oldest) even though both expired
 		},
 		want:        map[string]any{"c": 3},
 		wantMissing: []string{"a", "b"},
@@ -112,6 +112,22 @@ var evictionCases = []evictionTestCase{
 		want:        map[string]any{"b": 2},
 		wantMissing: []string{"a"},
 		wantLen:     1,
+	},
+	{
+		name:     "Set prefers expired over live LRU when at capacity",
+		capacity: 2,
+		ttl:      time.Second,
+		ops: func(c *Cache, clk *fakeClock) {
+			c.Set("a", 1)                // oldest, will expire
+			clk.advance(2 * time.Second) // a expired
+			c.Set("b", 2)                // newest, live (fresh expiry)
+			// a is expired at back, b is live at front
+			// Set should evict expired a, not live b
+			c.Set("c", 3)
+		},
+		want:        map[string]any{"b": 2, "c": 3},
+		wantMissing: []string{"a"},
+		wantLen:     2,
 	},
 }
 
@@ -143,13 +159,14 @@ func TestEviction(t *testing.T) {
 
 // expiryTestCase groups TTL expiry scenarios.
 type expiryTestCase struct {
-	name     string
-	capacity int
-	ttl      time.Duration
-	setup    func(c *Cache, clk *fakeClock)
-	advance  time.Duration
-	want     map[string]any    // expected present keys and values
+	name        string
+	capacity    int
+	ttl         time.Duration
+	setup       func(c *Cache, clk *fakeClock)
+	advance     time.Duration
+	want        map[string]any // expected present keys and values
 	wantMissing []string       // expected missing keys
+	wantLen     int            // expected Len() at end (optional, -1 to skip)
 }
 
 var expiryCases = []expiryTestCase{
@@ -160,9 +177,10 @@ var expiryCases = []expiryTestCase{
 		setup: func(c *Cache, clk *fakeClock) {
 			c.Set("a", 1)
 		},
-		advance: 1100 * time.Millisecond,
-		want:    map[string]any{},
+		advance:     1100 * time.Millisecond,
+		want:        map[string]any{},
 		wantMissing: []string{"a"},
+		wantLen:     -1,
 	},
 	{
 		name:     "entry not expired before TTL",
@@ -171,9 +189,10 @@ var expiryCases = []expiryTestCase{
 		setup: func(c *Cache, clk *fakeClock) {
 			c.Set("a", 1)
 		},
-		advance: 500 * time.Millisecond,
-		want:    map[string]any{"a": 1},
+		advance:     500 * time.Millisecond,
+		want:        map[string]any{"a": 1},
 		wantMissing: []string{},
+		wantLen:     -1,
 	},
 	{
 		name:     "exact at TTL boundary means expired",
@@ -182,9 +201,10 @@ var expiryCases = []expiryTestCase{
 		setup: func(c *Cache, clk *fakeClock) {
 			c.Set("a", 1)
 		},
-		advance: time.Second,
-		want:    map[string]any{},
+		advance:     time.Second,
+		want:        map[string]any{},
 		wantMissing: []string{"a"},
+		wantLen:     -1,
 	},
 	{
 		name:     "Set on existing key refreshes TTL",
@@ -195,9 +215,10 @@ var expiryCases = []expiryTestCase{
 			clk.advance(900 * time.Millisecond)
 			c.Set("a", 2) // refresh expiry
 		},
-		advance: 500 * time.Millisecond, // 1.4s since first set, 0.5s since refresh
-		want:    map[string]any{"a": 2},
+		advance:     500 * time.Millisecond, // 1.4s since first set, 0.5s since refresh
+		want:        map[string]any{"a": 2},
 		wantMissing: []string{},
+		wantLen:     -1,
 	},
 	{
 		name:     "refreshed entry eventually expires",
@@ -208,9 +229,10 @@ var expiryCases = []expiryTestCase{
 			clk.advance(900 * time.Millisecond)
 			c.Set("a", 2) // refresh expiry
 		},
-		advance: 1100 * time.Millisecond, // 1.1s since refresh
-		want:    map[string]any{},
+		advance:     1100 * time.Millisecond, // 1.1s since refresh
+		want:        map[string]any{},
 		wantMissing: []string{"a"},
+		wantLen:     -1,
 	},
 	{
 		name:     "lazy expiry removal on Get",
@@ -221,10 +243,10 @@ var expiryCases = []expiryTestCase{
 			c.Set("b", 2)
 			clk.advance(2 * time.Second) // both expired
 		},
-		advance: 0, // no additional advance; check after Get("a")
-		want:    map[string]any{},
+		advance:     0, // no additional advance; check after Get("a")
+		want:        map[string]any{},
 		wantMissing: []string{"a"},
-		// b is still in the list until accessed; Len counts it until then
+		wantLen:     1, // b still counted until accessed
 	},
 	{
 		name:     "ttl zero means no expiry",
@@ -233,9 +255,10 @@ var expiryCases = []expiryTestCase{
 		setup: func(c *Cache, clk *fakeClock) {
 			c.Set("a", 1)
 		},
-		advance: 24 * time.Hour,
-		want:    map[string]any{"a": 1},
+		advance:     24 * time.Hour,
+		want:        map[string]any{"a": 1},
 		wantMissing: []string{},
+		wantLen:     -1,
 	},
 	{
 		name:     "negative ttl means no expiry",
@@ -244,9 +267,10 @@ var expiryCases = []expiryTestCase{
 		setup: func(c *Cache, clk *fakeClock) {
 			c.Set("b", 2)
 		},
-		advance: 24 * time.Hour,
-		want:    map[string]any{"b": 2},
+		advance:     24 * time.Hour,
+		want:        map[string]any{"b": 2},
 		wantMissing: []string{},
+		wantLen:     -1,
 	},
 }
 
@@ -270,11 +294,8 @@ func TestExpiry(t *testing.T) {
 					t.Errorf("%s: expected %q to be missing, but it was present", tc.name, k)
 				}
 			}
-			// Special check for lazy removal test
-			if tc.name == "lazy expiry removal on Get" {
-				if c.Len() != 1 {
-					t.Errorf("%s: after Get(a) removed, Len() = %d, want 1 (b still counted until accessed)", tc.name, c.Len())
-				}
+			if tc.wantLen >= 0 && c.Len() != tc.wantLen {
+				t.Errorf("%s: Len() = %d, want %d", tc.name, c.Len(), tc.wantLen)
 			}
 		})
 	}
