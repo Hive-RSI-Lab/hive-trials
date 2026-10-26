@@ -96,8 +96,30 @@ func (c *Cache) Set(key string, value any) {
 	elem := c.ll.PushFront(ent)
 	c.items[key] = elem
 
+	// Sweep expired entries from the back before evicting a live LRU entry.
+	c.sweepExpired(now)
+
 	if c.ll.Len() > c.capacity {
 		c.removeOldest()
+	}
+}
+
+// sweepExpired removes expired entries from the back (oldest) of the list.
+// It stops when it reaches a non-expired entry or the list is at/below capacity.
+func (c *Cache) sweepExpired(now time.Time) {
+	if c.ttl <= 0 {
+		return
+	}
+	for c.ll.Len() > c.capacity {
+		elem := c.ll.Back()
+		if elem == nil {
+			break
+		}
+		ent := elem.Value.(*entry)
+		if now.Before(ent.expiry) {
+			break // oldest is still live
+		}
+		c.removeElement(elem)
 	}
 }
 
