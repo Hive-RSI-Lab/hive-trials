@@ -118,13 +118,15 @@ func (c *Cache) Set(key string, value any) {
 
 	// Evict if over capacity
 	if c.capacity > 0 && len(c.items) > c.capacity {
-		c.evictLRU()
+		c.evictLRUOrExpired(now)
 	}
 }
 
-// Len returns the number of items in the cache.
-// Note: expired entries are counted until they are accessed (via Get)
-// or evicted during a Set operation.
+// Len returns the number of items in the cache (including expired entries
+// that have not yet been accessed or evicted).
+// Expired entries remain in the cache until they are accessed (via Get)
+// or until they become the least-recently-used entry and are evicted
+// during a Set operation when the cache is at capacity.
 func (c *Cache) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -139,6 +141,27 @@ func (c *Cache) evictLRU() {
 	}
 	c.removeNode(lru)
 	delete(c.items, lru.key)
+}
+
+// evictLRUOrExpired first removes all expired entries, then evicts the LRU
+// if still over capacity.
+func (c *Cache) evictLRUOrExpired(now time.Time) {
+	// First, remove expired entries
+	if c.ttl > 0 {
+		for n := c.tail.prev; n != c.head; {
+			prev := n.prev
+			if now.After(n.expiresAt) {
+				c.removeNode(n)
+				delete(c.items, n.key)
+			}
+			n = prev
+		}
+	}
+
+	// If still over capacity, evict LRU
+	if c.capacity > 0 && len(c.items) > c.capacity {
+		c.evictLRU()
+	}
 }
 
 // addToFront adds a node right after head (most recently used position).
