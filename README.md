@@ -26,7 +26,7 @@ func main() {
 }
 ```
 
-The `Sum` function reads the CSV, expects a header row, and returns the sum of all numeric values in the named column. Empty cells are treated as zero. It returns an error if the column is missing or contains non‑numeric data.
+The `Sum` function reads the CSV, expects a header row, and returns the sum of all numeric values in the named column. Empty cells are treated as zero. An empty input (no header) returns 0 with no error. It returns an error if the column is missing or contains non-numeric data.
 
 ## Tests
 
@@ -34,7 +34,7 @@ Run `go test ./...` to execute the test suite covering normal operation, missing
 
 ## Word Counter (wc)
 
-A tiny Go package that counts words in a string, lower‑casing and splitting on non‑letters.
+A tiny Go package that counts words in a string, lower-casing and splitting on non-letters.
 
 ### Usage
 
