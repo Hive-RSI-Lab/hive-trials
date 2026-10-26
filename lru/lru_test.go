@@ -171,10 +171,11 @@ func TestLRUEvictionOrderExact(t *testing.T) {
 
 func TestTTLExpiry(t *testing.T) {
 	tests := []struct {
-		name  string
-		ttl   time.Duration
-		setup func(*Cache, *fakeClock)
-		check func(*testing.T, *Cache, *fakeClock)
+		name     string
+		ttl      time.Duration
+		capacity int
+		setup    func(*Cache, *fakeClock)
+		check    func(*testing.T, *Cache, *fakeClock)
 	}{
 		{
 			name: "entry expires after TTL",
@@ -285,12 +286,59 @@ func TestTTLExpiry(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:     "Set evicts expired entries before LRU when at capacity",
+			ttl:      100 * time.Millisecond,
+			capacity: 3,
+			setup: func(c *Cache, clk *fakeClock) {
+				clk.now = time.Now()
+				// Fill cache to capacity (3)
+				c.Set("a", 1)
+				c.Set("b", 2)
+				c.Set("c", 3)
+				// a is LRU, c is MRU
+				// Advance past TTL - all entries expired
+				clk.Advance(150 * time.Millisecond)
+			},
+			check: func(t *testing.T, c *Cache, clk *fakeClock) {
+				// All entries are expired but still in cache (Len=3)
+				if c.Len() != 3 {
+					t.Errorf("expected Len()=3 with expired entries, got %d", c.Len())
+				}
+
+				// Set a new entry - should evict expired entries first
+				c.Set("d", 4)
+
+				// Expired entries should be gone, only "d" remains
+				if c.Len() != 1 {
+					t.Errorf("expected Len()=1 after evicting expired, got %d", c.Len())
+				}
+
+				// "d" should exist
+				val, ok := c.Get("d")
+				if !ok || val != 4 {
+					t.Errorf("expected d=4, got %v, %v", val, ok)
+				}
+
+				// Expired entries should be gone
+				for _, key := range []string{"a", "b", "c"} {
+					_, ok := c.Get(key)
+					if ok {
+						t.Errorf("expired key %q should have been evicted", key)
+					}
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clk := &fakeClock{now: time.Now()}
-			c := New(10, tt.ttl)
+			capacity := 10
+			if tt.capacity > 0 {
+				capacity = tt.capacity
+			}
+			c := New(capacity, tt.ttl)
 			c.setClockForTest(clk)
 			tt.setup(c, clk)
 			tt.check(t, c, clk)
@@ -370,6 +418,47 @@ func TestUpdateInPlace(t *testing.T) {
 	}
 }
 
+// verifyCacheConsistency checks that the linked list and map are in sync,
+// and that Len() is within capacity bounds.
+func verifyCacheConsistency(t *testing.T, c *Cache, capacity int) {
+	t.Helper()
+
+	if c.Len() < 0 {
+		t.Errorf("Len() should not be negative, got %d", c.Len())
+	}
+	if capacity > 0 && c.Len() > capacity {
+		t.Errorf("Len() = %d exceeds capacity %d", c.Len(), capacity)
+	}
+
+	// Walk the linked list and verify each node is in the map
+	count := 0
+	for n := c.head.next; n != c.tail; n = n.next {
+		count++
+		if _, ok := c.items[n.key]; !ok {
+			t.Errorf("node with key %q in list but not in map", n.key)
+		}
+	}
+
+	// Verify map size matches list count
+	if count != len(c.items) {
+		t.Errorf("list count (%d) != map size (%d)", count, len(c.items))
+	}
+
+	// Verify all map entries are in the list
+	for key, n := range c.items {
+		found := false
+		for m := c.head.next; m != c.tail; m = m.next {
+			if m == n {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("key %q in map but not in list", key)
+		}
+	}
+}
+
 func TestConcurrency(t *testing.T) {
 	c := New(100, time.Hour)
 	var wg sync.WaitGroup
@@ -402,10 +491,8 @@ func TestConcurrency(t *testing.T) {
 
 	wg.Wait()
 
-	// Just verify cache is in a valid state
-	if c.Len() < 0 {
-		t.Errorf("Len() should not be negative")
-	}
+	// Verify cache consistency and capacity bounds
+	verifyCacheConsistency(t, c, 100)
 }
 
 func TestConcurrentReadWrite(t *testing.T) {
@@ -437,9 +524,8 @@ func TestConcurrentReadWrite(t *testing.T) {
 
 	wg.Wait()
 
-	if c.Len() < 0 {
-		t.Errorf("Len() should not be negative")
-	}
+	// Verify cache consistency and capacity bounds
+	verifyCacheConsistency(t, c, 1000)
 }
 
 func TestCapacityZero(t *testing.T) {
