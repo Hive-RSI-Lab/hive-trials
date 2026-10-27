@@ -71,6 +71,10 @@ func New(capacity int, ttl time.Duration) *Cache
 func (c *Cache) Get(key string) (any, bool)
 func (c *Cache) Set(key string, value any)
 func (c *Cache) Len() int
+
+// The acceptance tests swap the clock to test TTLs without sleeping:
+type Clock interface { Now() time.Time }
+func (c *Cache) setClockForTest(clock Clock)
 ```
 
 **Behavior:**
@@ -94,25 +98,11 @@ func (c *Cache) Len() int
 
 ## Trial Isolation
 
-Each trial runs in its own folder under `trials/<model>/<task>/` so two trials never touch the same files.
+Each trial runs in its own folder under `trials/<harness>/<model>/<task>/` so
+two trials never touch the same files: `trials/open/gpt-oss-120b/lru/`,
+`trials/codex/gpt-5/wc/`. Its code is in the package the task's tests name
+(`package wc`, `package csvsum`, `package lru`), with the API above.
 
-Example trial structure:
-```
-trials/
-  deepseek/
-    wc/
-      wc.go
-      wc_test.go
-    csvsum/
-      sum.go
-      sum_test.go
-    lru/
-      lru.go
-      lru_test.go
-  claude/
-    wc/
-    csvsum/
-    lru/
-```
-
-A trial's result is its ledger record in `hive agent models`, not the code it produces.
+A trial's verdict is whether that code passes the task's acceptance tests:
+`go run ./cmd/score` runs `tasks/<task>/*_test.go` against it, so the
+trial's own tests, if any, don't decide it. See the README's Score.
