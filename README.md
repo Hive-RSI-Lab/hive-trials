@@ -69,5 +69,6 @@ Run tests: `go test ./tasks/lru/...`
 ## Running All Tests
 
 ```bash
-go vet ./... && go test -race -count=1 ./...
+go test ./...                                 # what main runs
+go vet ./... && go test -race -count=1 ./...  # stricter, for the LRU concurrency tests
 ```
