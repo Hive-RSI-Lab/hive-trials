@@ -1,40 +1,63 @@
-// Command score prints the share of model × harness × task cells that have a
-// trial verdict in the ledger: one number between 0 and 1, higher is better.
+// Command score prints the share of routable model × harness × task cells
+// that have a verdict: one number between 0 and 1, higher is better.
 //
-// The score check runs in a sandbox that can't call `hive agent models`, so
-// the ledger it reads is ledger.json, a snapshot of that op's output saved
-// with
+// A cell's verdict is whether its trial's code, in trials/<harness>/<model>/
+// <task>/ on main, passes the task's acceptance tests in tasks/<task>/. The
+// score runs them itself, so a trial that changed or dropped its own tests
+// is judged the same. A trial that ended on a Hive fault (a 403, a lead
+// closing it, the warden leaving it open) landed no code and has no
+// verdict, whatever its ledger outcome.
+//
+// The ledger (ledger.json, a snapshot of `hive agent models`, saved with
 //
 //	hive agent models | go run ./cmd/score -save
 //
-// Run with no flags, it reads ledger.json, tasks/ and TASKS.md and prints the
-// score; -v also lists every cell.
+// because the score check's sandbox can't call it) only tells -v how each
+// cell's trials went: outcome, reason, cost, minutes and turns.
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
-// Harnesses are the harnesses a model can run on.
-var Harnesses = []string{"claude", "codex", "open", "cursor", "opencode"}
+// Native are the picks a harness runs on its own models, beside the named
+// models (which only the open harness runs: claude runs Anthropic models,
+// codex OpenAI's, cursor and opencode their own). Claude isn't here: the
+// Hive already knows it from all its other work.
+var Native = []Pick{
+	{"codex", "gpt-5"},
+	{"cursor", "auto"},
+	{"opencode", "opencode/big-pickle"},
+}
 
 // Project is the project whose trials count.
 const Project = "trials"
 
 // Trial is one record of the ledger's trials.
 type Trial struct {
-	Task    string `json:"task"`
-	Model   string `json:"model"`
-	Project string `json:"project"`
-	Title   string `json:"title"`
-	Outcome string `json:"outcome"`
+	Task         string  `json:"task"`
+	Model        string  `json:"model"`
+	Project      string  `json:"project"`
+	Title        string  `json:"title"`
+	Outcome      string  `json:"outcome"`
+	Reason       string  `json:"reason,omitempty"`
+	Cost         float64 `json:"cost"`
+	Minutes      int     `json:"minutes"`
+	Turns        int     `json:"turns"`
+	ReviewRounds int     `json:"review_rounds"`
 }
 
 // Ledger is what the score reads from `hive agent models`: the named models
@@ -48,8 +71,26 @@ type Ledger struct {
 // TASKS.md.
 type Task struct{ Dir, Name string }
 
-// Cell is one model on one harness on one task.
-type Cell struct{ Model, Harness, Task string }
+// Pick is one harness and model, as a route names it.
+type Pick struct{ Harness, Model string }
+
+func (p Pick) String() string { return p.Harness + ":" + p.Model }
+
+// Cell is one pick on one task.
+type Cell struct {
+	Pick
+	Task string
+}
+
+// Dir is where the cell's trial puts its code.
+func (c Cell) Dir() string { return filepath.Join("trials", c.Harness, c.Model, c.Task) }
+
+// Verdict is how a cell's code did on its acceptance tests; Ran is false
+// when there is no code to test.
+type Verdict struct {
+	Ran, Pass bool
+	Out       string
+}
 
 var heading = regexp.MustCompile(`(?m)^##\s+\d+\.\s+(.+?)\s+\(([^)]+)\)\s*$`)
 
@@ -75,16 +116,27 @@ func Tasks(tasksDir, tasksMD string) ([]Task, error) {
 	return out, nil
 }
 
-// Pick reads a trial's model as the ledger names it: a named model runs on
+// Picks are the routable picks: every named model on the open harness, then
+// Native.
+func Picks(named map[string]string) []Pick {
+	var out []Pick
+	for m := range named {
+		out = append(out, Pick{"open", m})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Model < out[j].Model })
+	return append(out, Native...)
+}
+
+// PickOf reads a trial's model as the ledger names it: a named model runs on
 // the open harness, "harness:model" on that harness.
-func Pick(model string, named map[string]string) (harness, name string) {
+func PickOf(model string, named map[string]string) Pick {
 	if _, ok := named[model]; ok {
-		return "open", model
+		return Pick{"open", model}
 	}
 	if h, m, ok := strings.Cut(model, ":"); ok {
-		return h, m
+		return Pick{h, m}
 	}
-	return "", model
+	return Pick{"", model}
 }
 
 // TaskOf is the task a trial's title names: the task's name from TASKS.md
@@ -103,37 +155,110 @@ func TaskOf(title string, tasks []Task) string {
 	return ""
 }
 
-// Score is the share of cells with a verdict, and every cell with whether it
-// has one.
-func Score(l Ledger, tasks []Task) (float64, map[Cell]bool) {
-	cells := map[Cell]bool{}
-	for m := range l.Models {
-		for _, h := range Harnesses {
-			for _, t := range tasks {
-				cells[Cell{m, h, t.Dir}] = false
-			}
+// Cells are the routable cells, in order.
+func Cells(l Ledger, tasks []Task) []Cell {
+	var out []Cell
+	for _, p := range Picks(l.Models) {
+		for _, t := range tasks {
+			out = append(out, Cell{p, t.Dir})
 		}
 	}
-	for _, tr := range l.Trials {
-		if tr.Project != Project || tr.Outcome == "" {
-			continue
-		}
-		h, m := Pick(tr.Model, l.Models)
-		c := Cell{m, h, TaskOf(tr.Title, tasks)}
-		if _, ok := cells[c]; ok {
-			cells[c] = true
-		}
-	}
-	if len(cells) == 0 {
-		return 0, cells
-	}
+	return out
+}
+
+// Score is the share of cells whose code ran its acceptance tests, by judge.
+func Score(cells []Cell, judge func(Cell) Verdict) (float64, map[Cell]Verdict) {
+	vs := map[Cell]Verdict{}
 	n := 0
-	for _, ok := range cells {
-		if ok {
+	for _, c := range cells {
+		vs[c] = judge(c)
+		if vs[c].Ran {
 			n++
 		}
 	}
-	return float64(n) / float64(len(cells)), cells
+	if len(cells) == 0 {
+		return 0, vs
+	}
+	return float64(n) / float64(len(cells)), vs
+}
+
+// Judge runs the acceptance tests in root/tasks/<task> against the cell's
+// code in root/<c.Dir()>: its non-test .go files, in a module of its own, so
+// the trial's own tests and the reference implementation play no part. A
+// cell with no code there didn't run. An error is the score's own fault (no
+// go, no temp dir), not the trial's.
+func Judge(root string, c Cell) (Verdict, error) {
+	code, err := goFiles(filepath.Join(root, c.Dir()), false)
+	if err != nil || len(code) == 0 {
+		return Verdict{}, nil
+	}
+	tests, err := goFiles(filepath.Join(root, "tasks", c.Task), true)
+	if err != nil {
+		return Verdict{}, err
+	}
+	dir, err := os.MkdirTemp("", "trial-")
+	if err != nil {
+		return Verdict{}, err
+	}
+	defer os.RemoveAll(dir)
+	for _, f := range append(code, tests...) {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return Verdict{}, err
+		}
+		if err := os.WriteFile(filepath.Join(dir, filepath.Base(f)), b, 0o644); err != nil {
+			return Verdict{}, err
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module trial\n\ngo 1.22\n"), 0o644); err != nil {
+		return Verdict{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", "test", "-count=1", ".")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOFLAGS=", "GOWORK=off")
+	var out bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	err = cmd.Run()
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		return Verdict{Ran: true, Pass: true}, nil
+	case errors.As(err, &exit): // failed tests, a build error or the timeout: the code's
+		return Verdict{Ran: true, Out: strings.ReplaceAll(out.String(), dir+"/", "")}, nil
+	default:
+		return Verdict{}, err
+	}
+}
+
+// goFiles are dir's .go files: the tests, or the rest.
+func goFiles(dir string, tests bool) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		n := e.Name()
+		if !e.IsDir() && strings.HasSuffix(n, ".go") && strings.HasSuffix(n, "_test.go") == tests {
+			out = append(out, filepath.Join(dir, n))
+		}
+	}
+	return out, nil
+}
+
+// TrialsOf are this project's ledger trials of each cell.
+func TrialsOf(l Ledger, tasks []Task) map[Cell][]Trial {
+	out := map[Cell][]Trial{}
+	for _, tr := range l.Trials {
+		if tr.Project != Project {
+			continue
+		}
+		c := Cell{PickOf(tr.Model, l.Models), TaskOf(tr.Title, tasks)}
+		out[c] = append(out[c], tr)
+	}
+	return out
 }
 
 // Save writes the models and this project's trials from `hive agent models`
@@ -160,54 +285,76 @@ func Save(r io.Reader, path string) error {
 	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
+// line is s's first line, at most n runes.
+func line(s string, n int) string {
+	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
+	if r := []rune(s); len(r) > n {
+		return string(r[:n-1]) + "…"
+	}
+	return s
+}
+
+// why is the line of go test's output that says why it failed: the first
+// failing test or compile error, else its first line.
+func why(out string) string {
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, "--- FAIL") || strings.Contains(l, ".go:") {
+			return strings.TrimSpace(l)
+		}
+	}
+	return out
+}
+
 func main() {
 	save := flag.Bool("save", false, "save `hive agent models` output on stdin as the ledger")
-	verbose := flag.Bool("v", false, "list every cell")
+	verbose := flag.Bool("v", false, "list every cell: its verdict and how its trials went")
 	ledger := flag.String("ledger", "ledger.json", "the ledger snapshot")
 	flag.Parse()
+	fail := func(err error) {
+		fmt.Fprintln(os.Stderr, "score:", err)
+		os.Exit(1)
+	}
 	if *save {
 		if err := Save(os.Stdin, *ledger); err != nil {
-			fmt.Fprintln(os.Stderr, "score:", err)
-			os.Exit(1)
+			fail(err)
 		}
 	}
 	raw, err := os.ReadFile(*ledger)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "score:", err)
-		os.Exit(1)
+		fail(err)
 	}
 	var l Ledger
 	if err := json.Unmarshal(raw, &l); err != nil {
-		fmt.Fprintln(os.Stderr, "score:", *ledger+":", err)
-		os.Exit(1)
+		fail(fmt.Errorf("%s: %w", *ledger, err))
 	}
 	tasks, err := Tasks("tasks", "TASKS.md")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "score:", err)
-		os.Exit(1)
+		fail(err)
 	}
-	s, cells := Score(l, tasks)
-	if *verbose {
-		var keys []Cell
-		for c := range cells {
-			keys = append(keys, c)
+	cells := Cells(l, tasks)
+	s, vs := Score(cells, func(c Cell) Verdict {
+		v, err := Judge(".", c)
+		if err != nil {
+			fail(fmt.Errorf("judging %s %s: %w", c.Pick, c.Task, err))
 		}
-		sort.Slice(keys, func(i, j int) bool {
-			a, b := keys[i], keys[j]
-			if a.Model != b.Model {
-				return a.Model < b.Model
+		return v
+	})
+	if *verbose {
+		trials := TrialsOf(l, tasks)
+		for _, c := range cells {
+			mark := "    "
+			if v := vs[c]; v.Ran && v.Pass {
+				mark = "pass"
+			} else if v.Ran {
+				mark = "fail"
 			}
-			if a.Harness != b.Harness {
-				return a.Harness < b.Harness
+			fmt.Printf("[%s] %s %s\n", mark, c.Pick, c.Task)
+			if v := vs[c]; v.Ran && !v.Pass {
+				fmt.Printf("       %s\n", line(why(v.Out), 120))
 			}
-			return a.Task < b.Task
-		})
-		for _, c := range keys {
-			mark := " "
-			if cells[c] {
-				mark = "x"
+			for _, t := range trials[c] {
+				fmt.Printf("       %s %s: %d min, %d turns, $%.2f: %s\n", t.Task, t.Outcome, t.Minutes, t.Turns, t.Cost, line(t.Reason, 100))
 			}
-			fmt.Printf("[%s] %s %s %s\n", mark, c.Model, c.Harness, c.Task)
 		}
 	}
 	fmt.Printf("%.4f\n", s)

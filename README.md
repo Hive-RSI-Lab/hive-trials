@@ -11,10 +11,10 @@ A scratch project for trying models and harnesses on small real tasks before rou
   - `csvsum/` - CSV Column Summer: sums numeric values from a specific CSV column
   - `lru/` - LRU Cache with TTL: thread-safe LRU cache with per-entry TTL support
 
-- **trials/<model>/<task>/** - Each trial runs in its own isolated folder so two trials never touch the same files
-  - Example: `trials/deepseek/wc/`, `trials/claude/csvsum/`, etc.
+- **trials/<harness>/<model>/<task>/** - Each trial runs in its own isolated folder so two trials never touch the same files
+  - Example: `trials/open/deepseek-v4-pro/wc/`, `trials/codex/gpt-5/csvsum/`
   - A trial writes only under its own folder
-  - A trial's result is its ledger record in `hive agent models`, not the code it produces
+  - A trial's verdict is whether this code passes the task's acceptance tests (see Score)
 
 - **Main project tests** - Main runs `go test ./...` (the test command in `.hive/project.json`) over `tasks/` and any trial folders
 
@@ -71,27 +71,32 @@ Run tests: `go test ./tasks/lru/...`
 ## Score
 
 `go run ./cmd/score` prints one number, higher is better: the share of
-cells that have a trial verdict in the ledger. A cell is one model × one
-harness × one task:
+routable cells that have a verdict. A cell is one pick (harness and model)
+on one task:
 
-- **models**: every named model in `hive agent models` (its `models`)
-- **harnesses**: `claude`, `codex`, `open`, `cursor`, `opencode`
+- **picks**: every named model in `hive agent models` (its `models`) on the
+  `open` harness, the only one that runs them; then `codex:gpt-5`,
+  `cursor:auto` and `opencode:opencode/big-pickle` (`Native` in
+  `cmd/score/main.go`), each harness on a model of its own
 - **tasks**: every folder under `tasks/`
 
-A cell has a verdict when a trial of this project in the ledger has any
-outcome (merged, done, blocked or stopped) for it. The trial's model gives
-the harness and model: a named model runs on `open`, `harness:model` on that
-harness. Its title gives the task: it names the task as its `TASKS.md`
-heading does (say "word counter"), or its folder in parentheses (say
-"(wc)"). Several trials of one cell count once.
+A cell's verdict is whether the code in `trials/<harness>/<model>/<task>/`
+passes the acceptance tests in `tasks/<task>/`: the score copies the
+folder's non-test `.go` files beside those tests and runs `go test`. Pass or
+fail, it is a verdict; a cell with no code on main has none. So a trial that
+ended on a Hive fault (a 403 from the forge, closed by the lead, left open by
+the warden) is no verdict, whatever its outcome in the ledger.
 
-The score check runs sandboxed and can't call `hive agent models`, so it
-reads `ledger.json`, a snapshot of it. After a trial ends, refresh and commit
-it:
+The ledger only says how each cell's trials went. The score check runs
+sandboxed and can't call `hive agent models`, so `-v` reads `ledger.json`, a
+snapshot of it, matching a trial to its cell by its model (a named model is
+`open`, `harness:model` that harness) and its title (the task's `TASKS.md`
+name, say "word counter", or its folder in parentheses, say "(wc)"). After a
+trial ends, refresh and commit it:
 
 ```bash
 hive agent models | go run ./cmd/score -save   # writes ledger.json, prints the score
-go run ./cmd/score -v                           # every cell, [x] with a verdict
+go run ./cmd/score -v                           # every cell: pass, fail or none, and its trials' outcome, reason, minutes, turns, cost
 ```
 
 ## Running All Tests
