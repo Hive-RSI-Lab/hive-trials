@@ -12,6 +12,8 @@ module, so it must build: main's `go test ./...` builds it.
 
 Land the attempt whether or not it passes: its verdict is whether it passes
 the acceptance tests in `tasks/<task>/`, which `go run ./cmd/score` runs
-against it. A failing attempt is a verdict too; one that never lands is none. The cell
-counts only once the ledger shows a trial of that pick and task merged, so
-code put in a folder any other way doesn't count.
+against it. There is no reference answer in the repo to copy: write the
+code from the task's description in `../TASKS.md` and its tests. A failing
+attempt is a verdict too; one that never lands is none. The cell counts only
+once the ledger shows a trial of that pick and task merged, so code put in a
+folder any other way doesn't count.

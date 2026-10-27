@@ -107,9 +107,8 @@ func trial(t *testing.T, c Cell, files map[string]string) string {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(root, "tasks/wc/wc.go"), "package wc\n\nfunc Count(s string) int { return len(s) }\n")
 	write(filepath.Join(root, "tasks/wc/wc_test.go"),
-		"package wc\n\nimport \"testing\"\n\nfunc TestCount(t *testing.T) {\n\tif Count(\"ab\") != 2 {\n\t\tt.Fatal(\"Count(ab) != 2\")\n\t}\n}\n")
+		"//go:build acceptance\n\npackage wc\n\nimport \"testing\"\n\nfunc TestCount(t *testing.T) {\n\tif Count(\"ab\") != 2 {\n\t\tt.Fatal(\"Count(ab) != 2\")\n\t}\n}\n")
 	for name, s := range files {
 		write(filepath.Join(root, c.Dir(), name), s)
 	}
@@ -159,40 +158,37 @@ func TestTasksFromRepo(t *testing.T) {
 	}
 }
 
-// The reference implementations pass their own acceptance tests when judged
-// as a trial's code would be.
-func TestJudgeReference(t *testing.T) {
+// tasks/ holds only acceptance tests, each behind the acceptance tag: no
+// answer a trial could copy, and nothing main's go test ./... would build.
+func TestNoAnswers(t *testing.T) {
 	got, err := Tasks("../../tasks", "../../TASKS.md")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, k := range got {
-		root := t.TempDir()
-		c := Cell{Pick{"open", "ref"}, k.Dir}
-		files, err := filepath.Glob(filepath.Join("../../tasks", k.Dir, "*.go"))
+		dir := filepath.Join("../../tasks", k.Dir)
+		code, err := goFiles(dir, false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, d := range []string{filepath.Join("tasks", k.Dir), c.Dir()} {
-			if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+		if len(code) > 0 {
+			t.Errorf("tasks/%s has code a trial could copy: %v", k.Dir, code)
+		}
+		tests, err := goFiles(dir, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(tests) == 0 {
+			t.Errorf("tasks/%s has no acceptance tests", k.Dir)
+		}
+		for _, f := range tests {
+			b, err := os.ReadFile(f)
+			if err != nil {
 				t.Fatal(err)
 			}
-			for _, f := range files {
-				b, err := os.ReadFile(f)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(filepath.Join(root, d, filepath.Base(f)), b, 0o644); err != nil {
-					t.Fatal(err)
-				}
+			if !strings.HasPrefix(string(b), "//go:build acceptance\n") {
+				t.Errorf("%s doesn't start with //go:build acceptance", f)
 			}
-		}
-		v, err := Judge(root, c)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !v.Ran || !v.Pass {
-			t.Errorf("reference %s: ran %v pass %v\n%s", k.Dir, v.Ran, v.Pass, v.Out)
 		}
 	}
 }
