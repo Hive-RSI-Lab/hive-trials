@@ -91,6 +91,18 @@
       "minutes": 177,
       "turns": 1,
       "review_rounds": 0
+    },
+    {
+      "task": "261027-183936-7427db3ba3",
+      "model": "opencode:opencode/big-pickle",
+      "project": "trials",
+      "title": "Word Counter (wc)",
+      "outcome": "merged",
+      "reason": "",
+      "cost": 0.0,
+      "minutes": 1,
+      "turns": 1,
+      "review_rounds": 0
     }
   ]
 }
