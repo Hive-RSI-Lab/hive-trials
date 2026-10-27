@@ -4,6 +4,8 @@ A scratch project for trying models and harnesses on small real tasks before rou
 
 ## Structure
 
+- **cmd/score/**, **ledger.json** - The score and the ledger snapshot it reads (see Score)
+
 - **tasks/** - Fixed task set with reference implementations and acceptance tests
   - `wc/` - Word Counter: counts words in a string (lower-case, split on non-letters)
   - `csvsum/` - CSV Column Summer: sums numeric values from a specific CSV column
@@ -65,6 +67,32 @@ val, ok := cache.Get("key")
 ```
 
 Run tests: `go test ./tasks/lru/...`
+
+## Score
+
+`go run ./cmd/score` prints one number, higher is better: the share of
+cells that have a trial verdict in the ledger. A cell is one model × one
+harness × one task:
+
+- **models**: every named model in `hive agent models` (its `models`)
+- **harnesses**: `claude`, `codex`, `open`, `cursor`, `opencode`
+- **tasks**: every folder under `tasks/`
+
+A cell has a verdict when a trial of this project in the ledger has any
+outcome (merged, done, blocked or stopped) for it. The trial's model gives
+the harness and model: a named model runs on `open`, `harness:model` on that
+harness. Its title gives the task: it names the task as its `TASKS.md`
+heading does (say "word counter"), or its folder in parentheses (say
+"(wc)"). Several trials of one cell count once.
+
+The score check runs sandboxed and can't call `hive agent models`, so it
+reads `ledger.json`, a snapshot of it. After a trial ends, refresh and commit
+it:
+
+```bash
+hive agent models | go run ./cmd/score -save   # writes ledger.json, prints the score
+go run ./cmd/score -v                           # every cell, [x] with a verdict
+```
 
 ## Running All Tests
 
