@@ -1,18 +1,21 @@
 // Command score prints the share of routable model × harness × task cells
 // that have a verdict: one number between 0 and 1, higher is better.
 //
-// A cell's verdict is whether its trial's code, in trials/<harness>/<model>/
-// <task>/ on main, passes the task's acceptance tests in tasks/<task>/. The
-// score runs them itself, so a trial that changed or dropped its own tests
-// is judged the same. A trial that ended on a Hive fault (a 403, a lead
-// closing it, the warden leaving it open) landed no code and has no
-// verdict, whatever its ledger outcome.
+// A cell counts only when a ledger trial on its pick and task landed its
+// code (its outcome is merged), and then its verdict is whether that code,
+// in trials/<harness>/<model>/<task>/ on main, passes the task's acceptance
+// tests in tasks/<task>/. The score runs them itself, so a trial that
+// changed or dropped its own tests is judged the same. A trial that ended
+// on a Hive fault (a 403, a lead closing it, the warden leaving it open)
+// landed nothing and gives no verdict; nor does code in a cell's folder
+// that no trial of that cell landed (put there by hand, or by a trial on
+// another pick or task).
 //
-// The ledger (ledger.json, a snapshot of `hive agent models`, saved with
+// The ledger is ledger.json, a snapshot of `hive agent models`, saved with
 //
 //	hive agent models | go run ./cmd/score -save
 //
-// because the score check's sandbox can't call it) only tells -v how each
+// because the score check's sandbox can't call it. -v also lists how each
 // cell's trials went: outcome, reason, cost, minutes and turns.
 package main
 
@@ -166,11 +169,29 @@ func Cells(l Ledger, tasks []Task) []Cell {
 	return out
 }
 
-// Score is the share of cells whose code ran its acceptance tests, by judge.
-func Score(cells []Cell, judge func(Cell) Verdict) (float64, map[Cell]Verdict) {
+// Landed is the outcome of a trial whose code is on main.
+const Landed = "merged"
+
+// Lands says whether any of a cell's trials landed its code.
+func Lands(trials []Trial) bool {
+	for _, t := range trials {
+		if t.Outcome == Landed {
+			return true
+		}
+	}
+	return false
+}
+
+// Score is the share of cells that a trial landed (by landed) and whose
+// code ran its acceptance tests (by judge); a cell no trial landed isn't
+// judged.
+func Score(cells []Cell, landed func(Cell) bool, judge func(Cell) Verdict) (float64, map[Cell]Verdict) {
 	vs := map[Cell]Verdict{}
 	n := 0
 	for _, c := range cells {
+		if !landed(c) {
+			continue
+		}
 		vs[c] = judge(c)
 		if vs[c].Ran {
 			n++
@@ -333,7 +354,8 @@ func main() {
 		fail(err)
 	}
 	cells := Cells(l, tasks)
-	s, vs := Score(cells, func(c Cell) Verdict {
+	trials := TrialsOf(l, tasks)
+	s, vs := Score(cells, func(c Cell) bool { return Lands(trials[c]) }, func(c Cell) Verdict {
 		v, err := Judge(".", c)
 		if err != nil {
 			fail(fmt.Errorf("judging %s %s: %w", c.Pick, c.Task, err))
@@ -341,7 +363,6 @@ func main() {
 		return v
 	})
 	if *verbose {
-		trials := TrialsOf(l, tasks)
 		for _, c := range cells {
 			mark := "    "
 			if v := vs[c]; v.Ran && v.Pass {
@@ -352,6 +373,11 @@ func main() {
 			fmt.Printf("[%s] %s %s\n", mark, c.Pick, c.Task)
 			if v := vs[c]; v.Ran && !v.Pass {
 				fmt.Printf("       %s\n", line(why(v.Out), 120))
+			}
+			if !Lands(trials[c]) {
+				if code, _ := goFiles(c.Dir(), false); len(code) > 0 {
+					fmt.Printf("       code in %s, but no trial of this cell landed it: not counted\n", c.Dir())
+				}
 			}
 			for _, t := range trials[c] {
 				fmt.Printf("       %s %s: %d min, %d turns, $%.2f: %s\n", t.Task, t.Outcome, t.Minutes, t.Turns, t.Cost, line(t.Reason, 100))

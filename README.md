@@ -82,23 +82,25 @@ on one task:
   `cmd/score/main.go`), each harness on a model of its own
 - **tasks**: every folder under `tasks/`
 
-A cell's verdict is whether the code in `trials/<harness>/<model>/<task>/`
-passes the acceptance tests in `tasks/<task>/`: the score copies the
-folder's non-test `.go` files beside those tests and runs `go test`. Pass or
-fail, it is a verdict; a cell with no code on main has none. So a trial that
+A cell counts only when a ledger trial on its pick and task landed its code
+(its outcome is `merged`). Its verdict is then whether the code in
+`trials/<harness>/<model>/<task>/` passes the acceptance tests in
+`tasks/<task>/`: the score copies the folder's non-test `.go` files beside
+those tests and runs `go test`. Pass or fail, it is a verdict. A trial that
 ended on a Hive fault (a 403 from the forge, closed by the lead, left open by
-the warden) is no verdict, whatever its outcome in the ledger.
+the warden) landed nothing and gives none; nor does code in a cell's folder
+that no trial of that cell landed (written by hand, or by a trial on another
+pick or task), which `-v` flags.
 
-The ledger only says how each cell's trials went. The score check runs
-sandboxed and can't call `hive agent models`, so `-v` reads `ledger.json`, a
-snapshot of it, matching a trial to its cell by its model (a named model is
+The score check runs sandboxed and can't call `hive agent models`, so the
+score reads `ledger.json`, a snapshot of it, matching a trial to its cell by its model (a named model is
 `open`, `harness:model` that harness) and its title (the task's `TASKS.md`
 name, say "word counter", or its folder in parentheses, say "(wc)"). After a
 trial ends, refresh and commit it:
 
 ```bash
 hive agent models | go run ./cmd/score -save   # writes ledger.json, prints the score
-go run ./cmd/score -v                           # every cell: pass, fail or none, and its trials' outcome, reason, minutes, turns, cost
+go run ./cmd/score -v                           # every cell: pass, fail or none, unlanded code, and its trials' outcome, reason, minutes, turns, cost
 ```
 
 ## Running All Tests
