@@ -1,6 +1,6 @@
 # Fixed Task Set
 
-This file defines the three fixed small tasks used for trials. Each task has its reference implementation and acceptance tests under `tasks/<task>/`.
+This file defines the three fixed small tasks used for trials. Each task's acceptance tests are under `tasks/<task>/`; no reference implementation is kept in the repo, so a trial can't copy the answer. The tests carry the `acceptance` build tag and run only through `go run ./cmd/score`, against a trial's code.
 
 ## 1. Word Counter (wc)
 
@@ -24,7 +24,7 @@ func Count(s string) map[string]int
 - Only punctuation returns empty map
 - Unicode letters (Café, CAFÉ naïve → café: 2, naïve: 1)
 
-**Run:** `go test ./tasks/wc/...`
+**Run:** `go run ./cmd/score -v` (judges every trial of it)
 
 ---
 
@@ -54,7 +54,7 @@ func Sum(r io.Reader, column string) (float64, error)
 - Empty cell counts as zero
 - Header only (no data rows) returns 0
 
-**Run:** `go test ./tasks/csvsum/...`
+**Run:** `go run ./cmd/score -v` (judges every trial of it)
 
 ---
 
@@ -92,7 +92,7 @@ func (c *Cache) setClockForTest(clock Clock)
 - Update in place (update existing key keeps it in cache, update moves to front)
 - Concurrent access safety (run with `go test -race`)
 
-**Run:** `go test ./tasks/lru/...`
+**Run:** `go run ./cmd/score -v` (judges every trial of it)
 
 ---
 

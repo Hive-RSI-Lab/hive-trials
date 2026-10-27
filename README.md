@@ -6,7 +6,10 @@ A scratch project for trying models and harnesses on small real tasks before rou
 
 - **cmd/score/**, **ledger.json** - The score and the ledger snapshot it reads (see Score)
 
-- **tasks/** - Fixed task set with reference implementations and acceptance tests
+- **tasks/** - Fixed task set: each task's acceptance tests, and no answer
+  - No reference implementation is kept here, so a trial can't copy one: the
+    tests are the spec, behind the `acceptance` build tag so main's
+    `go test ./...` doesn't build them without code
   - `wc/` - Word Counter: counts words in a string (lower-case, split on non-letters)
   - `csvsum/` - CSV Column Summer: sums numeric values from a specific CSV column
   - `lru/` - LRU Cache with TTL: thread-safe LRU cache with per-entry TTL support
@@ -16,7 +19,7 @@ A scratch project for trying models and harnesses on small real tasks before rou
   - A trial writes only under its own folder
   - A trial's verdict is whether this code passes the task's acceptance tests (see Score)
 
-- **Main project tests** - Main runs `go test ./...` (the test command in `.hive/project.json`) over `tasks/` and any trial folders
+- **Main project tests** - Main runs `go test ./...` (the test command in `.hive/project.json`): the score's tests, and it builds every trial folder; the acceptance tests run only through the score
 
 ## Tasks
 
@@ -24,13 +27,13 @@ A scratch project for trying models and harnesses on small real tasks before rou
 A tiny Go package that counts words in a string, lower-casing and splitting on non-letters.
 
 ```go
-import "trials/tasks/wc"
+// in trials/<harness>/<model>/wc/, package wc
 
 counts := wc.Count("Hello, WORLD! hello?")
 // counts == map[string]int{"hello": 2, "world": 1}
 ```
 
-Run tests: `go test ./tasks/wc/...`
+Its acceptance tests: `tasks/wc/`
 
 ### CSV Column Summer (csvsum)
 A tiny Go module that provides a function to sum numeric values from a specific column in a CSV file.
@@ -39,7 +42,6 @@ A tiny Go module that provides a function to sum numeric values from a specific 
 import (
     "fmt"
     "os"
-    "trials/tasks/csvsum"
 )
 
 func main() {
@@ -53,20 +55,20 @@ func main() {
 }
 ```
 
-Run tests: `go test ./tasks/csvsum/...`
+Its acceptance tests: `tasks/csvsum/`
 
 ### LRU Cache with TTL (lru)
 A thread-safe LRU cache with TTL support.
 
 ```go
-import "trials/tasks/lru"
+// in trials/<harness>/<model>/lru/, package lru
 
 cache := lru.New(3, 100*time.Millisecond)
 cache.Set("key", "value")
 val, ok := cache.Get("key")
 ```
 
-Run tests: `go test ./tasks/lru/...`
+Its acceptance tests: `tasks/lru/`
 
 ## Score
 
@@ -103,5 +105,13 @@ go run ./cmd/score -v                           # every cell: pass, fail or none
 
 ```bash
 go test ./...                                 # what main runs
-go vet ./... && go test -race -count=1 ./...  # stricter, for the LRU concurrency tests
+go vet ./... && go test -race -count=1 ./...  # stricter
+```
+
+To run a task's acceptance tests on a trial by hand, copy them beside its code
+and set the tag, as the score does:
+
+```bash
+cp tasks/lru/*_test.go /tmp/t/ && cp trials/open/<model>/lru/*.go /tmp/t/   # then, in /tmp/t with a go.mod:
+go test -race -tags acceptance .
 ```

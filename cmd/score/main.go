@@ -184,8 +184,9 @@ func Score(cells []Cell, judge func(Cell) Verdict) (float64, map[Cell]Verdict) {
 
 // Judge runs the acceptance tests in root/tasks/<task> against the cell's
 // code in root/<c.Dir()>: its non-test .go files, in a module of its own, so
-// the trial's own tests and the reference implementation play no part. A
-// cell with no code there didn't run. An error is the score's own fault (no
+// the trial's own tests play no part. The acceptance tests build only with
+// the acceptance tag (tasks/ holds no answer for them to build against on
+// main), so Judge sets it. A cell with no code there didn't run. An error is the score's own fault (no
 // go, no temp dir), not the trial's.
 func Judge(root string, c Cell) (Verdict, error) {
 	code, err := goFiles(filepath.Join(root, c.Dir()), false)
@@ -215,7 +216,7 @@ func Judge(root string, c Cell) (Verdict, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "test", "-count=1", ".")
+	cmd := exec.CommandContext(ctx, "go", "test", "-count=1", "-tags", "acceptance", ".")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOFLAGS=", "GOWORK=off")
 	var out bytes.Buffer
