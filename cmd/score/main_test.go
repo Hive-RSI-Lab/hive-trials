@@ -30,12 +30,47 @@ func TestScore(t *testing.T) {
 		{Pick{"codex", "gpt-5"}, "wc"}: {Ran: true, Pass: true},
 		{Pick{"claude", "a"}, "wc"}:    {Ran: true, Pass: true}, // not routable
 	}
-	s, _ := Score(cells, func(c Cell) Verdict { return ran[c] })
+	all := func(Cell) bool { return true }
+	s, _ := Score(cells, all, func(c Cell) Verdict { return ran[c] })
 	if want := 3.0 / float64(len(cells)); math.Abs(s-want) > 1e-9 {
 		t.Errorf("score = %v, want %v", s, want)
 	}
-	if s, _ := Score(nil, nil); s != 0 {
+	// Code no trial of its cell landed doesn't count, and isn't judged.
+	landed := func(c Cell) bool { return c != Cell{Pick{"open", "b"}, "lru"} }
+	s, vs := Score(cells, landed, func(c Cell) Verdict {
+		if !landed(c) {
+			t.Errorf("judged %v, which no trial landed", c)
+		}
+		return ran[c]
+	})
+	if want := 2.0 / float64(len(cells)); math.Abs(s-want) > 1e-9 {
+		t.Errorf("score with open:b lru not landed = %v, want %v", s, want)
+	}
+	if vs[Cell{Pick{"open", "b"}, "lru"}].Ran {
+		t.Errorf("open:b lru has a verdict though no trial landed it")
+	}
+	if s, _ := Score(nil, nil, nil); s != 0 {
 		t.Errorf("score of no cells = %v, want 0", s)
+	}
+}
+
+func TestLands(t *testing.T) {
+	for _, tc := range []struct {
+		outcomes []string
+		want     bool
+	}{
+		{nil, false},
+		{[]string{"stopped", "blocked"}, false},
+		{[]string{"done"}, false}, // finished, but its code isn't on main yet
+		{[]string{"stopped", "merged"}, true},
+	} {
+		var trs []Trial
+		for _, o := range tc.outcomes {
+			trs = append(trs, Trial{Outcome: o})
+		}
+		if got := Lands(trs); got != tc.want {
+			t.Errorf("Lands(%v) = %v, want %v", tc.outcomes, got, tc.want)
+		}
 	}
 }
 
