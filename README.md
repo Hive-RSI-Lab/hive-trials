@@ -14,7 +14,7 @@ A scratch project for trying models and harnesses on small real tasks before rou
   - A trial writes only under its own folder
   - A trial's result is its ledger record in `hive agent models`, not the code it produces
 
-- **Main project tests** - The main module runs `go vet ./... && go test -race -count=1 ./...` on the reference implementations in `tasks/`
+- **Main project tests** - Main runs `go test ./...` (the test command in `.hive/project.json`) over `tasks/` and any trial folders
 
 ## Tasks
 
@@ -22,7 +22,7 @@ A scratch project for trying models and harnesses on small real tasks before rou
 A tiny Go package that counts words in a string, lower-casing and splitting on non-letters.
 
 ```go
-import "tasks/wc"
+import "trials/tasks/wc"
 
 counts := wc.Count("Hello, WORLD! hello?")
 // counts == map[string]int{"hello": 2, "world": 1}
@@ -37,7 +37,7 @@ A tiny Go module that provides a function to sum numeric values from a specific 
 import (
     "fmt"
     "os"
-    "tasks/csvsum"
+    "trials/tasks/csvsum"
 )
 
 func main() {
@@ -57,7 +57,7 @@ Run tests: `go test ./tasks/csvsum/...`
 A thread-safe LRU cache with TTL support.
 
 ```go
-import "tasks/lru"
+import "trials/tasks/lru"
 
 cache := lru.New(3, 100*time.Millisecond)
 cache.Set("key", "value")
