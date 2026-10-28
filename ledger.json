@@ -1,11 +1,11 @@
 {
   "models": {
-    "deepseek-v4-pro": "deepseek/deepseek-v4-pro at https://openrouter.ai/api/v1, needs a key",
-    "gpt-oss-120b": "openai/gpt-oss-120b at https://openrouter.ai/api/v1, needs a key",
+    "deepseek-v4-pro": "deepseek/deepseek-v4-pro at https://openrouter.ai/api/v1, $0.9553/$1.9105 per million tokens in/out, needs a key",
+    "gpt-oss-120b": "openai/gpt-oss-120b at https://openrouter.ai/api/v1, $0.15/$0.6 per million tokens in/out, needs a key",
     "inkling-free": "thinkingmachines/inkling:free at https://openrouter.ai/api/v1, $0/$0 per million tokens in/out, needs a key",
     "laguna-free": "poolside/laguna-s-2.1:free at https://openrouter.ai/api/v1, $0/$0 per million tokens in/out, needs a key",
     "openrouter": "nvidia/nemotron-3-ultra-550b-a55b:free at https://openrouter.ai/api/v1, $0/$0 per million tokens in/out, needs a key",
-    "qwen3-coder-next": "qwen/qwen3-coder-next at https://openrouter.ai/api/v1, needs a key"
+    "qwen3-coder-next": "qwen/qwen3-coder-next at https://openrouter.ai/api/v1, $0.12/$0.8 per million tokens in/out, needs a key"
   },
   "trials": [
     {
@@ -104,6 +104,18 @@
       "review_rounds": 0
     },
     {
+      "task": "261027-171322-9eb9703bf5",
+      "model": "laguna-free",
+      "project": "trials",
+      "title": "wc on open/laguna-free",
+      "outcome": "stopped",
+      "reason": "left open: the warden: Not merging as is: the PR's ledger.json hunk is a self-written entry by the trial itself declaring its own outcome 'merged' (before it merged, with minutes 0), which is exactly what makes its cell count in the score. That moves the score in favour of the work that wrote it. Precedent: commit c2b34a0 landed PRs #42 and #49's wc code 'without their self-written ledger.json entries'; README says ledger.json is a snapshot made by 'hive agent models | go run ./cmd/score -save' after a trial ends. Safer route: drop the ledger.json change from the branch (git checkout origin/main -- ledger.json, commit) so the PR only adds trials/open/laguna-free/wc/; that needs no warden. The ledger gets refreshed from hive agent models after the trial ends.",
+      "cost": 0,
+      "minutes": 766,
+      "turns": 3,
+      "review_rounds": 0
+    },
+    {
       "task": "261027-183934-1b9eea5ca2",
       "model": "cursor:auto",
       "project": "trials",
@@ -163,6 +175,30 @@
       "review_rounds": 0
     },
     {
+      "task": "261027-205007-28de0d8950",
+      "model": "deepseek-v4-pro",
+      "project": "trials",
+      "title": "csvsum on open/deepseek-v4-pro",
+      "outcome": "stopped",
+      "reason": "gave up after repeated errors: a run won't start on deepseek-v4-pro: deepseek/deepseek-v4-pro on OpenRouter isn't a free model, and the key there pays for every model but the free ones; only a model id ending in \":free\" is allowed",
+      "cost": 0,
+      "minutes": 417,
+      "turns": 0,
+      "review_rounds": 0
+    },
+    {
+      "task": "261027-205013-5f3cf54e9b",
+      "model": "deepseek-v4-pro",
+      "project": "trials",
+      "title": "lru on open/deepseek-v4-pro",
+      "outcome": "stopped",
+      "reason": "withdrawn by lead-project-trials-e234d44c23: deepseek-v4-pro is paid; the OpenRouter key now allows only :free models",
+      "cost": 0,
+      "minutes": 417,
+      "turns": 0,
+      "review_rounds": 0
+    },
+    {
       "task": "261028-013810-d0eceaf1d1",
       "model": "codex",
       "project": "trials",
@@ -172,6 +208,50 @@
       "cost": 0,
       "minutes": 0,
       "turns": 0,
+      "review_rounds": 0
+    },
+    {
+      "task": "261028-055956-d3e70b8424",
+      "model": "openrouter",
+      "project": "trials",
+      "title": "csvsum on open/openrouter (csvsum)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 144,
+      "turns": 1,
+      "review_rounds": 0
+    },
+    {
+      "task": "261028-055957-30f7433a8a",
+      "model": "openrouter",
+      "project": "trials",
+      "title": "lru on open/openrouter (lru)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 146,
+      "turns": 1,
+      "review_rounds": 0
+    },
+    {
+      "task": "261028-055958-6817a3a4d0",
+      "model": "laguna-free",
+      "project": "trials",
+      "title": "csvsum on open/laguna-free (csvsum)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 144,
+      "turns": 1,
+      "review_rounds": 0
+    },
+    {
+      "task": "261028-055959-45c1da2c3e",
+      "model": "laguna-free",
+      "project": "trials",
+      "title": "lru on open/laguna-free (lru)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 144,
+      "turns": 2,
       "review_rounds": 0
     }
   ]
