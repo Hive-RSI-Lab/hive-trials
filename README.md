@@ -107,6 +107,18 @@ go run ./cmd/score -v                           # every cell: pass, fail or none
 A trial's PR adds only its `trials/<harness>/<model>/<task>/` code and never
 edits `ledger.json`, which is refreshed from the record after the trial ends.
 
+Each new verdict (pass or fail) then goes to the knowledge base as a routing
+note, so routing can find how a pick did without reading this repo: one note
+per cell, titled "Routing: <pick> passes|fails <task> (trials verdict)",
+tagged `trials,routing,verdict` and the model, with the trial's task id,
+commit, turns, minutes, cost and what the verdict says about routing work to
+that pick:
+
+```bash
+hive agent remember --title "Routing: open:<model> passes wc (trials verdict)" \
+  --tags trials,routing,verdict,<model> --text "..."
+```
+
 ## Running All Tests
 
 ```bash
