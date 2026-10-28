@@ -96,6 +96,28 @@ func TestTrialsOf(t *testing.T) {
 	}
 }
 
+func TestTaskOf(t *testing.T) {
+	for _, tc := range []struct {
+		title string
+		dir   string
+	}{
+		{"A tiny Go module: a word counter with tests", "wc"},
+		{"Again (wc)", "wc"},
+		{"An LRU cache with TTL", "lru"},
+		{"wc on open/deepseek-v4-pro", "wc"},
+		{"csvsum on open/gpt-oss-120b", "csvsum"},
+		{"lru on codex/gpt-5", "lru"},
+		{"WC on open/DeepSeek-v4-pro", "wc"}, // case insensitive
+		{"something else", ""},
+	} {
+		t.Run(tc.title, func(t *testing.T) {
+			if got := TaskOf(tc.title, tasks); got != tc.dir {
+				t.Errorf("TaskOf(%q) = %q, want %q", tc.title, got, tc.dir)
+			}
+		})
+	}
+}
+
 // trial lays out a repo in a temp dir with the wc task and the cell's code.
 func trial(t *testing.T, c Cell, files map[string]string) string {
 	root := t.TempDir()
