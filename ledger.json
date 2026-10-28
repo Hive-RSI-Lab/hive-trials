@@ -13,10 +13,9 @@
       "model": "openrouter",
       "project": "trials",
       "title": "A tiny Go module: a word counter with tests",
-      "outcome": "stopped",
-      "reason": "gave up after repeated errors: gh api repos/Hive-RSI-Lab/hive-trials/commits/fa2ec42bff45ca0e5d059e4a6429e8c0495ebd36/check-runs?per_page=100: gh: Resource not accessible by personal access token (HTTP 403)",
+      "outcome": "done",
       "cost": 0,
-      "minutes": 47,
+      "minutes": 1394,
       "turns": 7,
       "review_rounds": 0
     },
@@ -25,11 +24,10 @@
       "model": "gpt-oss-120b",
       "project": "trials",
       "title": "A tiny Go module: a CSV column summer with tests",
-      "outcome": "stopped",
-      "reason": "gave up after repeated errors: gh api repos/Hive-RSI-Lab/hive-trials/commits/e5789b39d9d40ee34abf3b53886ee38529028feb/check-runs?per_page=100: gh: Resource not accessible by personal access token (HTTP 403)",
+      "outcome": "done",
       "cost": 0,
-      "minutes": 14,
-      "turns": 5,
+      "minutes": 1375,
+      "turns": 11,
       "review_rounds": 0
     },
     {
@@ -37,11 +35,10 @@
       "model": "openrouter",
       "project": "trials",
       "title": "An LRU cache with TTL, safe for concurrent use (openrouter)",
-      "outcome": "stopped",
-      "reason": "gave up after repeated errors: gh api repos/Hive-RSI-Lab/hive-trials/commits/e94d192245a0727f6f970e75e2b7d4f81e8b89e3/check-runs?per_page=100: gh: Resource not accessible by personal access token (HTTP 403)",
+      "outcome": "done",
       "cost": 0,
-      "minutes": 400,
-      "turns": 4,
+      "minutes": 1296,
+      "turns": 6,
       "review_rounds": 0
     },
     {
@@ -85,11 +82,10 @@
       "model": "deepseek-v4-pro",
       "project": "trials",
       "title": "An LRU cache with TTL (deepseek-v4-pro)",
-      "outcome": "stopped",
-      "reason": "gave up after repeated errors: gh api repos/Hive-RSI-Lab/hive-trials/commits/bad0267129bc729be186395ca627185683bef867/check-runs?per_page=100: gh: Resource not accessible by personal access token (HTTP 403)",
+      "outcome": "done",
       "cost": 0,
-      "minutes": 177,
-      "turns": 1,
+      "minutes": 1246,
+      "turns": 6,
       "review_rounds": 0
     },
     {
@@ -172,18 +168,6 @@
       "cost": 0,
       "minutes": 418,
       "turns": 6,
-      "review_rounds": 0
-    },
-    {
-      "task": "261027-205007-28de0d8950",
-      "model": "deepseek-v4-pro",
-      "project": "trials",
-      "title": "csvsum on open/deepseek-v4-pro",
-      "outcome": "stopped",
-      "reason": "gave up after repeated errors: a run won't start on deepseek-v4-pro: deepseek/deepseek-v4-pro on OpenRouter isn't a free model, and the key there pays for every model but the free ones; only a model id ending in \":free\" is allowed",
-      "cost": 0,
-      "minutes": 417,
-      "turns": 0,
       "review_rounds": 0
     },
     {
