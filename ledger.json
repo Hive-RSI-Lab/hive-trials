@@ -87,7 +87,7 @@
       "title": "An LRU cache with TTL (deepseek-v4-pro)",
       "outcome": "stopped",
       "reason": "gave up after repeated errors: gh api repos/Hive-RSI-Lab/hive-trials/commits/bad0267129bc729be186395ca627185683bef867/check-runs?per_page=100: gh: Resource not accessible by personal access token (HTTP 403)",
-      "cost": 0,
+      "cost": -1,
       "minutes": 177,
       "turns": 1,
       "review_rounds": 0
@@ -145,7 +145,7 @@
       "project": "trials",
       "title": "wc on open/deepseek-v4-pro",
       "outcome": "merged",
-      "cost": 0,
+      "cost": -1,
       "minutes": 130,
       "turns": 1,
       "review_rounds": 0
@@ -181,7 +181,7 @@
       "title": "csvsum on open/deepseek-v4-pro",
       "outcome": "stopped",
       "reason": "gave up after repeated errors: a run won't start on deepseek-v4-pro: deepseek/deepseek-v4-pro on OpenRouter isn't a free model, and the key there pays for every model but the free ones; only a model id ending in \":free\" is allowed",
-      "cost": 0,
+      "cost": -1,
       "minutes": 417,
       "turns": 0,
       "review_rounds": 0
@@ -193,7 +193,7 @@
       "title": "lru on open/deepseek-v4-pro",
       "outcome": "stopped",
       "reason": "withdrawn by lead-project-trials-e234d44c23: deepseek-v4-pro is paid; the OpenRouter key now allows only :free models",
-      "cost": 0,
+      "cost": -1,
       "minutes": 417,
       "turns": 0,
       "review_rounds": 0

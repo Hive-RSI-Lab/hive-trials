@@ -103,6 +103,13 @@ hive agent models | go run ./cmd/score -save   # writes ledger.json, prints the 
 go run ./cmd/score -v                           # every cell: pass, fail or none, unlanded code, and its trials' outcome, reason, minutes, turns, cost
 ```
 
+**Note on costs**: deepseek-v4-pro is a paid model; its pricing was added to the Hive config after early trials ran. Those trials' costs are marked as `-1` (unknown) in `ledger.json`, not 0.
+
+```bash
+hive agent models | go run ./cmd/score -save   # writes ledger.json, prints the score
+go run ./cmd/score -v                           # every cell: pass, fail or none, unlanded code, and its trials' outcome, reason, minutes, turns, cost
+```
+
 ## Running All Tests
 
 ```bash
