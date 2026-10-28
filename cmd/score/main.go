@@ -143,7 +143,8 @@ func PickOf(model string, named map[string]string) Pick {
 }
 
 // TaskOf is the task a trial's title names: the task's name from TASKS.md
-// (say "Word Counter") or its folder in parentheses (say "(wc)"); "" when
+// (say "Word Counter"), its folder in parentheses (say "(wc)"), or a title
+// that starts with "<dir> on " (say "wc on open/deepseek-v4-pro"); "" when
 // none does.
 func TaskOf(title string, tasks []Task) string {
 	t := strings.ToLower(title)
@@ -152,6 +153,10 @@ func TaskOf(title string, tasks []Task) string {
 			return k.Dir
 		}
 		if strings.Contains(t, "("+strings.ToLower(k.Dir)+")") {
+			return k.Dir
+		}
+		// Also match the "<dir> on <harness>/<model>" pattern
+		if strings.HasPrefix(t, strings.ToLower(k.Dir)+" on ") {
 			return k.Dir
 		}
 	}
