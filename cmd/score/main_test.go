@@ -84,7 +84,7 @@ func TestTrialsOf(t *testing.T) {
 			{Task: "4", Model: "a", Project: "deck", Title: "word counter", Outcome: "merged"},
 		},
 	}
-	got := TrialsOf(l, tasks)
+	got, unavail := TrialsOf(l, tasks)
 	if n := len(got[Cell{Pick{"open", "a"}, "wc"}]); n != 2 {
 		t.Errorf("open:a wc has %d trials, want 2", n)
 	}
@@ -93,6 +93,9 @@ func TestTrialsOf(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Errorf("cells with trials = %v, want 2 (another project's trial doesn't count)", got)
+	}
+	if len(unavail) != 0 {
+		t.Errorf("unavail = %v, want empty", unavail)
 	}
 }
 
