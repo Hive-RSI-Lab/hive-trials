@@ -275,17 +275,29 @@ func goFiles(dir string, tests bool) ([]string, error) {
 	return out, nil
 }
 
-// TrialsOf are this project's ledger trials of each cell.
-func TrialsOf(l Ledger, tasks []Task) map[Cell][]Trial {
+// UnavailableMark marks a trial's reason when the pick is unavailable on this
+// machine (not a model result).
+const UnavailableMark = "Not a model result"
+
+// TrialsOf are this project's ledger trials of each cell, and the set of
+// unavailable picks (ones with a trial whose reason contains UnavailableMark).
+func TrialsOf(l Ledger, tasks []Task) (map[Cell][]Trial, map[Pick]string) {
 	out := map[Cell][]Trial{}
+	unavail := map[Pick]string{}
 	for _, tr := range l.Trials {
 		if tr.Project != Project {
 			continue
 		}
 		c := Cell{PickOf(tr.Model, l.Models), TaskOf(tr.Title, tasks)}
 		out[c] = append(out[c], tr)
+		if strings.Contains(tr.Reason, UnavailableMark) {
+			p := PickOf(tr.Model, l.Models)
+			if _, ok := unavail[p]; !ok {
+				unavail[p] = tr.Reason
+			}
+		}
 	}
-	return out
+	return out, unavail
 }
 
 // Save writes the models and this project's trials from `hive agent models`
@@ -358,8 +370,17 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	cells := Cells(l, tasks)
-	trials := TrialsOf(l, tasks)
+	allCells := Cells(l, tasks)
+	trials, unavail := TrialsOf(l, tasks)
+
+	// Filter out unavailable picks from cells for scoring
+	var cells []Cell
+	for _, c := range allCells {
+		if _, isUnavail := unavail[c.Pick]; !isUnavail {
+			cells = append(cells, c)
+		}
+	}
+
 	s, vs := Score(cells, func(c Cell) bool { return Lands(trials[c]) }, func(c Cell) Verdict {
 		v, err := Judge(".", c)
 		if err != nil {
@@ -368,7 +389,12 @@ func main() {
 		return v
 	})
 	if *verbose {
-		for _, c := range cells {
+		for _, c := range allCells {
+			if reason, isUnavail := unavail[c.Pick]; isUnavail {
+				fmt.Printf("[unavail] %s %s\n", c.Pick, c.Task)
+				fmt.Printf("       %s\n", line(reason, 120))
+				continue
+			}
 			mark := "    "
 			if v := vs[c]; v.Ran && v.Pass {
 				mark = "pass"
