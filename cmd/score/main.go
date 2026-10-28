@@ -46,6 +46,17 @@ var Native = []Pick{
 	{"opencode", "opencode/big-pickle"},
 }
 
+// availableHarnesses returns the set of harnesses available on this machine.
+func availableHarnesses() map[string]bool {
+	avail := map[string]bool{"open": true} // open harness is always available
+	for _, p := range Native {
+		if _, err := exec.LookPath(p.Harness); err == nil {
+			avail[p.Harness] = true
+		}
+	}
+	return avail
+}
+
 // Project is the project whose trials count.
 const Project = "trials"
 
@@ -161,9 +172,25 @@ func TaskOf(title string, tasks []Task) string {
 // Cells are the routable cells, in order.
 func Cells(l Ledger, tasks []Task) []Cell {
 	var out []Cell
+	avail := availableHarnesses()
 	for _, p := range Picks(l.Models) {
+		if !avail[p.Harness] {
+			continue
+		}
 		for _, t := range tasks {
 			out = append(out, Cell{p, t.Dir})
+		}
+	}
+	return out
+}
+
+// UnavailablePicks returns picks whose harness is not available on this machine.
+func UnavailablePicks(l Ledger) []Pick {
+	var out []Pick
+	avail := availableHarnesses()
+	for _, p := range Picks(l.Models) {
+		if !avail[p.Harness] {
+			out = append(out, p)
 		}
 	}
 	return out
@@ -381,6 +408,19 @@ func main() {
 			}
 			for _, t := range trials[c] {
 				fmt.Printf("       %s %s: %d min, %d turns, $%.2f: %s\n", t.Task, t.Outcome, t.Minutes, t.Turns, t.Cost, line(t.Reason, 100))
+			}
+		}
+		// Report unavailable picks
+		unavail := UnavailablePicks(l)
+		if len(unavail) > 0 {
+			fmt.Println()
+			fmt.Println("Unavailable picks (harness not installed):")
+			seen := map[Pick]bool{}
+			for _, p := range unavail {
+				if !seen[p] {
+					fmt.Printf("  %s\n", p)
+					seen[p] = true
+				}
 			}
 		}
 	}

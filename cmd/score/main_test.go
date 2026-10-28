@@ -12,7 +12,15 @@ var tasks = []Task{{"csvsum", "CSV Column Summer"}, {"lru", "LRU Cache with TTL"
 
 func TestCells(t *testing.T) {
 	cells := Cells(Ledger{Models: map[string]string{"a": "", "b": ""}}, tasks)
-	if want := (2 + len(Native)) * len(tasks); len(cells) != want {
+	// 2 named models on open, plus available native harnesses (codex is available in tests)
+	avail := availableHarnesses()
+	want := 2 * len(tasks) // open harness
+	for _, p := range Native {
+		if avail[p.Harness] {
+			want += len(tasks)
+		}
+	}
+	if len(cells) != want {
 		t.Fatalf("cells = %d, want %d", len(cells), want)
 	}
 	for _, c := range cells {
@@ -32,6 +40,7 @@ func TestScore(t *testing.T) {
 	}
 	all := func(Cell) bool { return true }
 	s, _ := Score(cells, all, func(c Cell) Verdict { return ran[c] })
+	// 3 cells ran (open:a wc, open:b lru, codex:gpt-5 wc)
 	if want := 3.0 / float64(len(cells)); math.Abs(s-want) > 1e-9 {
 		t.Errorf("score = %v, want %v", s, want)
 	}
@@ -43,6 +52,7 @@ func TestScore(t *testing.T) {
 		}
 		return ran[c]
 	})
+	// 2 cells ran and landed (open:a wc, codex:gpt-5 wc)
 	if want := 2.0 / float64(len(cells)); math.Abs(s-want) > 1e-9 {
 		t.Errorf("score with open:b lru not landed = %v, want %v", s, want)
 	}
