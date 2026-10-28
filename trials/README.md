@@ -6,7 +6,7 @@ and `<model>` are the trial's pick (a named model like `gpt-oss-120b` runs on
 `csvsum`, `lru`).
 
 A trial writes only inside its own folder. It does not touch `go.mod`,
-`tasks/`, `.hive/` or another trial's folder, so two trials never collide.
+`tasks/`, `.hive/`, `ledger.json` or another trial's folder, so two trials never collide.
 Its package is the one the task's tests name (`package lru`), in the root
 module, so it must build: main's `go test ./...` builds it.
 
