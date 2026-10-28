@@ -17,3 +17,14 @@ code from the task's description in `../TASKS.md` and its tests. A failing
 attempt is a verdict too; one that never lands is none. The cell counts only
 once the ledger shows a trial of that pick and task merged, so code put in a
 folder any other way doesn't count.
+
+## Known limits
+
+**OpenRouter free-model daily cap is shared Hive-wide** (recorded 2026-10-27)
+
+- All free models on OpenRouter (e.g., `openrouter` = nemotron :free, `laguna-free`) share a single daily request cap per API key.
+- The worker route puts `open:openrouter` first, so routed work consumes the same cap that trials need.
+- On 2026-10-27 both free `wc` trials parked at 00:00Z waiting for the cap to reset, after hitting 429 `free-models-per-day-high-balance`.
+- `inkling-free` is refused by OpenRouter outside the "agentic harnesses" listed at openrouter.ai/apps (403).
+
+Route free models with this in mind: trials and routed work draw from the same daily quota.
