@@ -235,3 +235,57 @@ func TestSave(t *testing.T) {
 		t.Errorf("saved ledger:\n%s", s)
 	}
 }
+
+// A bug-fix task's starting code (tasks/<task>/_start, which go ignores) is
+// what a trial copies and fixes: it builds and fails the acceptance tests,
+// so landing it unchanged is a fail, not a pass.
+func TestStartsFail(t *testing.T) {
+	got, err := Tasks("../../tasks", "../../TASKS.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range got {
+		start := filepath.Join("../../tasks", k.Dir, "_start")
+		code, err := goFiles(start, false)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil || len(code) == 0 {
+			t.Fatalf("%s: %v %v", start, code, err)
+		}
+		c := Cell{Pick{"start", "start"}, k.Dir}
+		root := t.TempDir()
+		for _, dir := range []string{c.Dir(), filepath.Join("tasks", k.Dir)} {
+			if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		tests, _ := goFiles(filepath.Join("../../tasks", k.Dir), true)
+		for _, f := range code {
+			copyFile(t, f, filepath.Join(root, c.Dir(), filepath.Base(f)))
+		}
+		for _, f := range tests {
+			copyFile(t, f, filepath.Join(root, "tasks", k.Dir, filepath.Base(f)))
+		}
+		v, err := Judge(root, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !v.Ran || v.Pass {
+			t.Errorf("tasks/%s/_start: verdict ran %v pass %v, want a fail\n%s", k.Dir, v.Ran, v.Pass, v.Out)
+		} else if strings.Contains(v.Out, "build failed") || strings.Contains(v.Out, "[setup failed]") {
+			t.Errorf("tasks/%s/_start doesn't build against its tests:\n%s", k.Dir, v.Out)
+		}
+	}
+}
+
+func copyFile(t *testing.T, from, to string) {
+	t.Helper()
+	b, err := os.ReadFile(from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(to, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

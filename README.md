@@ -13,6 +13,8 @@ A scratch project for trying models and harnesses on small real tasks before rou
   - `wc/` - Word Counter: counts words in a string (lower-case, split on non-letters)
   - `csvsum/` - CSV Column Summer: sums numeric values from a specific CSV column
   - `lru/` - LRU Cache with TTL: thread-safe LRU cache with per-entry TTL support
+  - `gocache/` - Build Cache Fix: a bug fix across three files of a copy of the Hive's
+    `internal/gocache`, whose buggy starting code is in `gocache/_start/` (go ignores it)
 
 - **trials/<harness>/<model>/<task>/** - Each trial runs in its own isolated folder so two trials never touch the same files
   - Example: `trials/open/deepseek-v4-pro/wc/`, `trials/codex/gpt-5/csvsum/`
@@ -69,6 +71,21 @@ val, ok := cache.Get("key")
 ```
 
 Its acceptance tests: `tasks/lru/`
+
+### Build Cache Fix (gocache)
+A bug fix in existing code, from real Hive work: the trial copies
+`tasks/gocache/_start/*.go` (a copy of the Hive's GOCACHEPROG, split into
+three files, with four bugs) into its folder and fixes them from the bug
+reports in `TASKS.md`.
+
+```go
+// in trials/<harness>/<model>/gocache/, package gocache
+
+c := gocache.Cache{Shared: "/cache/main", Own: "/cache/this-check"}
+err := c.Serve(os.Stdin, os.Stdout)
+```
+
+Its acceptance tests: `tasks/gocache/`
 
 ## Score
 

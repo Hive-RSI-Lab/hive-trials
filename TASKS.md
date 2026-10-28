@@ -1,6 +1,6 @@
 # Fixed Task Set
 
-This file defines the three fixed small tasks used for trials. Each task's acceptance tests are under `tasks/<task>/`; no reference implementation is kept in the repo, so a trial can't copy the answer. The tests carry the `acceptance` build tag and run only through `go run ./cmd/score`, against a trial's code.
+This file defines the four fixed small tasks used for trials. Each task's acceptance tests are under `tasks/<task>/`; no reference implementation is kept in the repo, so a trial can't copy the answer. The first three are written from scratch; the fourth is a bug fix in existing code, which the task gives in `tasks/<task>/_start/` (a folder go ignores, so main never builds it). The tests carry the `acceptance` build tag and run only through `go run ./cmd/score`, against a trial's code.
 
 ## 1. Word Counter (wc)
 
@@ -96,12 +96,64 @@ func (c *Cache) setClockForTest(clock Clock)
 
 ---
 
+## 4. Build Cache Fix (gocache)
+
+**Location:** `tasks/gocache/`, starting code in `tasks/gocache/_start/`
+
+**Description:** A bug fix across files in an existing Go package, from real
+Hive work: a copy of the Hive's `internal/gocache`, the GOCACHEPROG
+(https://pkg.go.dev/cmd/go/internal/cacheprog) a check's `go` command uses to
+reuse what main's checks built. It answers the go command's JSON requests
+(`get`, `put`, `close`) from two folders laid out as go lays out GOCACHE: a
+read-only one shared with main's checks, and the check's own. The copy is
+split into `serve.go` (the protocol), `store.go` (reading and writing
+entries) and `layout.go` (where an entry lives and what it says), and has
+bugs. Copy the three files into your trial folder, keep the package and its
+API, find the causes and fix them.
+
+**API (as in `_start/`):**
+```go
+type Cache struct{ Shared, Own string }
+type Entry struct { Output []byte; Size int64; At time.Time; Path string }
+func (c Cache) Serve(in io.Reader, out io.Writer) error
+func (c Cache) Get(action []byte) (Entry, bool)
+func Put(dir string, action, output, body []byte) (string, error)
+```
+
+**Bug reports** (what was seen, not where the cause is):
+1. A check hangs, or answers the go command's next request wrongly, after go
+   puts an empty output (a `put` with `BodySize` 0, which has no body line).
+2. A branch check gets main's output for an action it rebuilt itself, when
+   both folders have it: what the check built itself must win.
+3. About one action in sixteen always misses in main's shared cache though go
+   wrote it there: those whose ID starts with a byte below 0x10.
+4. An output file cut short (a full disk, a killed copy) is served, and the
+   build fails on a corrupt object instead of rebuilding.
+
+**Acceptance Tests:** `tasks/gocache/gocache_test.go`
+- Handshake names get, put and close
+- Put then get through Serve; nothing written to the shared folder
+- Empty put; body size mismatch; unknown command; input ending without close
+- Own folder before the shared one
+- Entries go's own GOCACHE layout wrote, for IDs starting 00, 0a, 0f, 10, ff; Put lays out the same way
+- Cut-short, missing and folder outputs miss
+- Malformed entries (version, action, newline, output ID, size, fields) miss
+- Put rejects bad IDs
+
+The starting code builds and passes every test but the four bug reports'
+(`TestStartsFail` in `cmd/score` checks that it fails), so landing it
+unchanged is a fail.
+
+**Run:** `go run ./cmd/score -v` (judges every trial of it)
+
+---
+
 ## Trial Isolation
 
 Each trial runs in its own folder under `trials/<harness>/<model>/<task>/` so
 two trials never touch the same files: `trials/open/gpt-oss-120b/lru/`,
 `trials/codex/gpt-5/wc/`. Its code is in the package the task's tests name
-(`package wc`, `package csvsum`, `package lru`), with the API above.
+(`package wc`, `package csvsum`, `package lru`, `package gocache`), with the API above.
 
 A trial's verdict is whether that code passes the task's acceptance tests:
 `go run ./cmd/score` runs `tasks/<task>/*_test.go` against it, so the
