@@ -2,9 +2,9 @@
   "models": {
     "deepseek-v4-pro": "deepseek/deepseek-v4-pro at https://openrouter.ai/api/v1, needs a key",
     "gpt-oss-120b": "openai/gpt-oss-120b at https://openrouter.ai/api/v1, needs a key",
-    "inkling-free": "thinkingmachines/inkling:free at https://openrouter.ai/api/v1, needs a key",
-    "laguna-free": "poolside/laguna-s-2.1:free at https://openrouter.ai/api/v1, needs a key",
-    "openrouter": "nvidia/nemotron-3-ultra-550b-a55b:free at https://openrouter.ai/api/v1, needs a key",
+    "inkling-free": "thinkingmachines/inkling:free at https://openrouter.ai/api/v1, $0/$0 per million tokens in/out, needs a key",
+    "laguna-free": "poolside/laguna-s-2.1:free at https://openrouter.ai/api/v1, $0/$0 per million tokens in/out, needs a key",
+    "openrouter": "nvidia/nemotron-3-ultra-550b-a55b:free at https://openrouter.ai/api/v1, $0/$0 per million tokens in/out, needs a key",
     "qwen3-coder-next": "qwen/qwen3-coder-next at https://openrouter.ai/api/v1, needs a key"
   },
   "trials": [
@@ -90,6 +90,88 @@
       "cost": 0,
       "minutes": 177,
       "turns": 1,
+      "review_rounds": 0
+    },
+    {
+      "task": "261027-171322-3aa0ee51b1",
+      "model": "openrouter",
+      "project": "trials",
+      "title": "wc on open/openrouter",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 602,
+      "turns": 3,
+      "review_rounds": 0
+    },
+    {
+      "task": "261027-183934-1b9eea5ca2",
+      "model": "cursor:auto",
+      "project": "trials",
+      "title": "wc on cursor/auto",
+      "outcome": "blocked",
+      "reason": "stopped while quiet by lead-project-trials-e234d44c23: cursor harness has no API key stored; needs the person (hive harness key cursor). Not a model result.",
+      "cost": 0,
+      "minutes": 57,
+      "turns": 0,
+      "review_rounds": 0
+    },
+    {
+      "task": "261027-183936-7427db3ba3",
+      "model": "opencode:opencode/big-pickle",
+      "project": "trials",
+      "title": "wc on opencode/opencode/big-pickle",
+      "outcome": "blocked",
+      "reason": "stopped while quiet by lead-project-trials-e234d44c23: opencode is not installed on this machine; requested from the warden. Not a model result.",
+      "cost": 0,
+      "minutes": 57,
+      "turns": 6,
+      "review_rounds": 0
+    },
+    {
+      "task": "261027-183938-185cbaab40",
+      "model": "deepseek-v4-pro",
+      "project": "trials",
+      "title": "wc on open/deepseek-v4-pro",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 130,
+      "turns": 1,
+      "review_rounds": 0
+    },
+    {
+      "task": "261027-183938-5b7586b60b",
+      "model": "qwen3-coder-next",
+      "project": "trials",
+      "title": "wc on open/qwen3-coder-next",
+      "outcome": "stopped",
+      "reason": "left open",
+      "cost": 0,
+      "minutes": 450,
+      "turns": 1,
+      "review_rounds": 0
+    },
+    {
+      "task": "261027-183938-95b28472e8",
+      "model": "codex:gpt-5",
+      "project": "trials",
+      "title": "wc on codex/gpt-5",
+      "outcome": "blocked",
+      "reason": "stopped while quiet by lead-project-trials-e234d44c23: codex:gpt-5 unavailable on this ChatGPT login (400 model_not_found, every turn). Not a model result.",
+      "cost": 0,
+      "minutes": 418,
+      "turns": 6,
+      "review_rounds": 0
+    },
+    {
+      "task": "261028-013810-d0eceaf1d1",
+      "model": "codex",
+      "project": "trials",
+      "title": "wc on codex/default (wc)",
+      "outcome": "stopped",
+      "reason": "withdrawn by lead-project-trials-e234d44c23: misfiled: --model codex became claude:codex, not the codex harness",
+      "cost": 0,
+      "minutes": 0,
+      "turns": 0,
       "review_rounds": 0
     }
   ]

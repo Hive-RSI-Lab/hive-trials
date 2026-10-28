@@ -95,7 +95,8 @@ pick or task), which `-v` flags.
 The score check runs sandboxed and can't call `hive agent models`, so the
 score reads `ledger.json`, a snapshot of it, matching a trial to its cell by its model (a named model is
 `open`, `harness:model` that harness) and its title (the task's `TASKS.md`
-name, say "word counter", or its folder in parentheses, say "(wc)"). After a
+name, say "Word Counter", or its folder in parentheses, say "(wc)", or a title
+that starts with "<dir> on ", say "wc on open/deepseek-v4-pro"). After a
 trial ends, refresh and commit it:
 
 ```bash
