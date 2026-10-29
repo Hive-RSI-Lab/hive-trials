@@ -260,6 +260,17 @@
       "minutes": 432,
       "turns": 1,
       "review_rounds": 0
+    },
+    {
+      "task": "261028-202205-01b2107ac6",
+      "model": "codex:",
+      "project": "trials",
+      "title": "wc on codex/default (wc)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 444,
+      "turns": 1,
+      "review_rounds": 0
     }
   ]
 }
