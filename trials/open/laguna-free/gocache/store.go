@@ -52,7 +52,7 @@ func lookup(dir string, action []byte) (Entry, bool) {
 	if err != nil {
 		return Entry{}, false
 	}
-	if fi.Size() != e.Size {
+	if !fi.Mode().IsRegular() || fi.Size() != e.Size {
 		return Entry{}, false
 	}
 	return e, true
