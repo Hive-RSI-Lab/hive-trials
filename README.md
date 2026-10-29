@@ -15,6 +15,9 @@ A scratch project for trying models and harnesses on small real tasks before rou
   - `lru/` - LRU Cache with TTL: thread-safe LRU cache with per-entry TTL support
   - `gocache/` - Build Cache Fix: a bug fix across three files of a copy of the Hive's
     `internal/gocache`, whose buggy starting code is in `gocache/_start/` (go ignores it)
+  - `config/` - Config Includes: an `include` directive added across three files of a
+    small config reader in `config/_start/`, judged by hidden acceptance tests
+    (`config_test.go.gz`, which the score unzips) on edges the spec leaves to the reader
 
 - **trials/<harness>/<model>/<task>/** - Each trial runs in its own isolated folder so two trials never touch the same files
   - Example: `trials/open/deepseek-v4-pro/wc/`, `trials/codex/gpt-5/csvsum/`
@@ -87,6 +90,22 @@ err := c.Serve(os.Stdin, os.Stdout)
 
 Its acceptance tests: `tasks/gocache/`
 
+### Config Includes (config)
+A feature in existing code: the trial copies `tasks/config/_start/*.go` (an
+INI-like config reader in three files) into its folder and adds an `include`
+directive to the spec in `TASKS.md`. Its acceptance tests are hidden: they
+are gzipped, so the trial is judged on how it reads the spec, edges
+included, as real work is.
+
+```go
+// in trials/<harness>/<model>/config/, package config
+
+c, err := config.Load("/etc/app/main.conf") // main.conf: include db.conf
+host, ok := c.Get("db.host")
+```
+
+Its acceptance tests: `tasks/config/config_test.go.gz`
+
 ## Score
 
 `go run ./cmd/score` prints one number, higher is better: the share of
@@ -103,7 +122,7 @@ A cell counts only when a ledger trial on its pick and task landed its code
 (its outcome is `merged`). Its verdict is then whether the code in
 `trials/<harness>/<model>/<task>/` passes the acceptance tests in
 `tasks/<task>/`: the score copies the folder's non-test `.go` files beside
-those tests and runs `go test`. Pass or fail, it is a verdict. A trial that
+those tests (unzipping a hidden `_test.go.gz`) and runs `go test`. Pass or fail, it is a verdict. A trial that
 ended on a Hive fault (a 403 from the forge, closed by the lead, left open by
 the warden) landed nothing and gives none; nor does code in a cell's folder
 that no trial of that cell landed (written by hand, or by a trial on another
