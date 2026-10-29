@@ -237,6 +237,18 @@
       "minutes": 144,
       "turns": 2,
       "review_rounds": 0
+    },
+    {
+      "task": "261028-151056-80234016ed",
+      "model": "laguna-free",
+      "project": "trials",
+      "title": "wc on open/laguna-free (wc)",
+      "outcome": "blocked",
+      "reason": "stopped while quiet by lead-project-trials-e234d44c23: parked on laguna-free's daily limit until 00:00Z, holding a Hive-wide worker slot; recheck after reset",
+      "cost": 0,
+      "minutes": 469,
+      "turns": 1,
+      "review_rounds": 0
     }
   ]
 }
