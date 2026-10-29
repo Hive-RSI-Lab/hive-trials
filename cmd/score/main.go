@@ -437,6 +437,47 @@ func main() {
 				fmt.Printf("       %s %s: %d min, %d turns, $%.2f: %s\n", t.Task, t.Outcome, t.Minutes, t.Turns, t.Cost, line(t.Reason, 100))
 			}
 		}
+
+		// Per-pick summary: verdicts vs worker record (ledger outcomes)
+		fmt.Println()
+		fmt.Println("Per-pick verdicts vs worker record:")
+		pickVerdicts := map[Pick]struct{ pass, fail, noCode, merged int }{}
+		for _, c := range cells {
+			p := c.Pick
+			stats := pickVerdicts[p]
+			landed := Lands(trials[c])
+			if landed {
+				stats.merged++
+				v := vs[c]
+				if v.Ran {
+					if v.Pass {
+						stats.pass++
+					} else {
+						stats.fail++
+					}
+				} else {
+					stats.noCode++
+				}
+			}
+			pickVerdicts[p] = stats
+		}
+		picks := Picks(l.Models)
+		for _, p := range picks {
+			stats := pickVerdicts[p]
+			if stats.merged == 0 {
+				fmt.Printf("  %s: no merged trials\n", p)
+				continue
+			}
+			agree := stats.pass
+			disagree := stats.fail
+			noCode := stats.noCode
+			fmt.Printf("  %s: %d merged, %d pass, %d fail, %d no-code\n", p, stats.merged, agree, disagree, noCode)
+			if disagree > 0 {
+				fmt.Printf("       ^^^ %d merged trial(s) failed acceptance tests\n", disagree)
+			} else if agree > 0 {
+				fmt.Printf("       all %d merged trial(s) pass\n", agree)
+			}
+		}
 	}
 	fmt.Printf("%.4f\n", s)
 }
