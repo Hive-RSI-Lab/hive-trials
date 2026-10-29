@@ -249,6 +249,17 @@
       "minutes": 469,
       "turns": 1,
       "review_rounds": 0
+    },
+    {
+      "task": "261028-202157-ed1363b294",
+      "model": "openrouter",
+      "project": "trials",
+      "title": "gocache on open/openrouter (gocache)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 432,
+      "turns": 1,
+      "review_rounds": 0
     }
   ]
 }
