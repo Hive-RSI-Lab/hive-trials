@@ -4,6 +4,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -25,10 +26,10 @@ func TestCells(t *testing.T) {
 func TestScore(t *testing.T) {
 	cells := Cells(Ledger{Models: map[string]string{"a": "", "b": ""}}, tasks)
 	ran := map[Cell]Verdict{
-		{Pick{"open", "a"}, "wc"}:      {Ran: true, Pass: true},
-		{Pick{"open", "b"}, "lru"}:     {Ran: true}, // a failing verdict is a verdict
-		{Pick{"codex", "gpt-5"}, "wc"}: {Ran: true, Pass: true},
-		{Pick{"claude", "a"}, "wc"}:    {Ran: true, Pass: true}, // not routable
+		{Pick{"open", "a"}, "wc"}:   {Ran: true, Pass: true},
+		{Pick{"open", "b"}, "lru"}:  {Ran: true}, // a failing verdict is a verdict
+		{Pick{"codex", ""}, "wc"}:   {Ran: true, Pass: true},
+		{Pick{"claude", "a"}, "wc"}: {Ran: true, Pass: true}, // not routable
 	}
 	all := func(Cell) bool { return true }
 	s, _ := Score(cells, all, func(c Cell) Verdict { return ran[c] })
@@ -82,6 +83,7 @@ func TestTrialsOf(t *testing.T) {
 			{Task: "2", Model: "a", Project: "trials", Title: "Again (wc)", Outcome: "blocked"},
 			{Task: "3", Model: "codex:gpt-5", Project: "trials", Title: "An LRU cache with TTL", Outcome: "merged"},
 			{Task: "4", Model: "a", Project: "deck", Title: "word counter", Outcome: "merged"},
+			{Task: "5", Model: "codex:", Project: "trials", Title: "wc on codex/default (wc)", Outcome: "merged"},
 		},
 	}
 	got := TrialsOf(l, tasks)
@@ -91,8 +93,20 @@ func TestTrialsOf(t *testing.T) {
 	if n := len(got[Cell{Pick{"codex", "gpt-5"}, "lru"}]); n != 1 {
 		t.Errorf("codex:gpt-5 lru has %d trials, want 1", n)
 	}
-	if len(got) != 2 {
-		t.Errorf("cells with trials = %v, want 2 (another project's trial doesn't count)", got)
+	// "codex:" is codex on its login's default model: a routable cell,
+	// whose code is in trials/codex/default/.
+	c := Cell{Pick{"codex", ""}, "wc"}
+	if n := len(got[c]); n != 1 {
+		t.Errorf("codex: wc has %d trials, want 1", n)
+	}
+	if want := filepath.Join("trials", "codex", "default", "wc"); c.Dir() != want {
+		t.Errorf("codex: wc Dir = %q, want %q", c.Dir(), want)
+	}
+	if !slices.Contains(Picks(nil), c.Pick) {
+		t.Errorf("Picks = %v, want codex: among them", Picks(nil))
+	}
+	if len(got) != 3 {
+		t.Errorf("cells with trials = %v, want 3 (another project's trial doesn't count)", got)
 	}
 }
 

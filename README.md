@@ -17,7 +17,7 @@ A scratch project for trying models and harnesses on small real tasks before rou
     `internal/gocache`, whose buggy starting code is in `gocache/_start/` (go ignores it)
 
 - **trials/<harness>/<model>/<task>/** - Each trial runs in its own isolated folder so two trials never touch the same files
-  - Example: `trials/open/deepseek-v4-pro/wc/`, `trials/codex/gpt-5/csvsum/`
+  - Example: `trials/open/deepseek-v4-pro/wc/`, `trials/codex/default/csvsum/`
   - A trial writes only under its own folder
   - A trial's verdict is whether this code passes the task's acceptance tests (see Score)
 
@@ -94,7 +94,7 @@ routable cells that have a verdict. A cell is one pick (harness and model)
 on one task:
 
 - **picks**: every named model in `hive agent models` (its `models`) on the
-  `open` harness, the only one that runs them; then `codex:gpt-5`,
+  `open` harness, the only one that runs them; then `codex:` (codex on its login's default model, in `trials/codex/default/`),
   `cursor:auto` and `opencode:opencode/big-pickle` (`Native` in
   `cmd/score/main.go`), each harness on a model of its own
 - **tasks**: every folder under `tasks/`
