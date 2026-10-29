@@ -251,6 +251,17 @@
       "review_rounds": 0
     },
     {
+      "task": "261028-202157-952c3d0576",
+      "model": "laguna-free",
+      "project": "trials",
+      "title": "gocache on open/laguna-free (gocache)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 485,
+      "turns": 2,
+      "review_rounds": 0
+    },
+    {
       "task": "261028-202157-ed1363b294",
       "model": "openrouter",
       "project": "trials",
