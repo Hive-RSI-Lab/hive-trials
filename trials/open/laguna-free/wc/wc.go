@@ -1,4 +1,5 @@
-// Package wc counts words in a string.
+// Package wc counts words in a string, lower-casing and splitting on
+// non-letters (Unicode-aware).
 package wc
 
 import "unicode"
