@@ -1,6 +1,6 @@
 # Fixed Task Set
 
-This file defines the four fixed small tasks used for trials. Each task's acceptance tests are under `tasks/<task>/`; no reference implementation is kept in the repo, so a trial can't copy the answer. The first three are written from scratch; the fourth is a bug fix in existing code, which the task gives in `tasks/<task>/_start/` (a folder go ignores, so main never builds it). The tests carry the `acceptance` build tag and run only through `go run ./cmd/score`, against a trial's code.
+This file defines the five fixed small tasks used for trials. Each task's acceptance tests are under `tasks/<task>/`; no reference implementation is kept in the repo, so a trial can't copy the answer. The first three are written from scratch; the fourth is a bug fix and the fifth a feature in existing code, which the task gives in `tasks/<task>/_start/` (a folder go ignores, so main never builds it). The tests carry the `acceptance` build tag and run only through `go run ./cmd/score`, against a trial's code.
 
 ## 1. Word Counter (wc)
 
@@ -148,12 +148,61 @@ unchanged is a fail.
 
 ---
 
+## 5. Config Includes (config)
+
+**Location:** `tasks/config/`, starting code in `tasks/config/_start/`
+
+**Description:** A feature across files in an existing Go package: a small
+reader for INI-like config files, split into `config.go` (the API),
+`parse.go` (the lines) and `errors.go` (errors that name a file and line).
+Copy the three files into your trial folder, keep the package and its API,
+and add an `include` directive. Read the starting code first: what it does
+now is part of the spec.
+
+**API (as in `_start/`):**
+```go
+type Config struct { ... }
+func Load(path string) (*Config, error)
+func Parse(r io.Reader, name string) (*Config, error)
+func (c *Config) Get(key string) (string, bool)
+func (c *Config) Keys() []string
+type Error struct { File string; Line int; Msg string } // Error() is "file:line: msg"; add fields if you need them
+```
+
+**The change:**
+- A line `include <path>` reads the file at path in its place: its keys are
+  set as if they stood there, so a key set before the include is overridden
+  by it and one set after overrides it. The path is written as a value is
+  (quoted when it has spaces; a ` #` comment may follow).
+- A relative path is relative to the folder of the file that names it (for
+  `Parse`, the folder of `name`).
+- An included file is read as a file of its own: it starts outside any
+  section, and after it the including file goes on in its own section.
+- A file that includes itself, directly or through other files, is an error,
+  not a hang.
+- Every error still names the file and line it is at: a bad line in an
+  included file is an error at that file and line, and an include that can't
+  be read is an error at the include line. A missing include is such an
+  error, and `errors.Is(err, fs.ErrNotExist)` holds for it, as it does now
+  for a missing file passed to `Load`.
+- Every file that loads now loads to the same values.
+
+**Acceptance Tests:** hidden, in `tasks/config/config_test.go.gz`, which the
+score unzips. Don't open it: the trial is judged on how it reads the spec
+above and the starting code, edges included, as real work would be. It
+tests what loads now, includes in place, paths, sections, cycles and errors.
+The starting code builds and fails them (`TestStartsFail`).
+
+**Run:** `go run ./cmd/score -v` (judges every trial of it)
+
+---
+
 ## Trial Isolation
 
 Each trial runs in its own folder under `trials/<harness>/<model>/<task>/` so
 two trials never touch the same files: `trials/open/gpt-oss-120b/lru/`,
 `trials/codex/gpt-5/wc/`. Its code is in the package the task's tests name
-(`package wc`, `package csvsum`, `package lru`, `package gocache`), with the API above.
+(`package wc`, `package csvsum`, `package lru`, `package gocache`, `package config`), with the API above.
 
 A trial's verdict is whether that code passes the task's acceptance tests:
 `go run ./cmd/score` runs `tasks/<task>/*_test.go` against it, so the

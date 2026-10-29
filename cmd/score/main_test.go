@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"math"
 	"os"
 	"path/filepath"
@@ -165,6 +167,43 @@ func TestJudge(t *testing.T) {
 	}
 }
 
+// A hidden acceptance test (a _test.go.gz) is judged as a plain one is.
+func TestJudgeHidden(t *testing.T) {
+	c := Cell{Pick{"open", "m"}, "wc"}
+	for _, tc := range []struct {
+		name string
+		code string
+		pass bool
+	}{
+		{"passes", "package wc\n\nfunc Count(s string) int { return len(s) }\n", true},
+		{"fails", "package wc\n\nfunc Count(s string) int { return 0 }\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := trial(t, c, map[string]string{"wc.go": tc.code})
+			plain := filepath.Join(root, "tasks/wc/wc_test.go")
+			b, err := os.ReadFile(plain)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var z bytes.Buffer
+			w := gzip.NewWriter(&z)
+			w.Write(b)
+			w.Close()
+			os.Remove(plain)
+			if err := os.WriteFile(plain+".gz", z.Bytes(), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			v, err := Judge(root, c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !v.Ran || v.Pass != tc.pass {
+				t.Errorf("verdict = ran %v pass %v, want pass %v\n%s", v.Ran, v.Pass, tc.pass, v.Out)
+			}
+		})
+	}
+}
+
 func TestTasksFromRepo(t *testing.T) {
 	got, err := Tasks("../../tasks", "../../TASKS.md")
 	if err != nil {
@@ -196,20 +235,16 @@ func TestNoAnswers(t *testing.T) {
 		if len(code) > 0 {
 			t.Errorf("tasks/%s has code a trial could copy: %v", k.Dir, code)
 		}
-		tests, err := goFiles(dir, true)
+		tests, err := Acceptance(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(tests) == 0 {
 			t.Errorf("tasks/%s has no acceptance tests", k.Dir)
 		}
-		for _, f := range tests {
-			b, err := os.ReadFile(f)
-			if err != nil {
-				t.Fatal(err)
-			}
+		for f, b := range tests {
 			if !strings.HasPrefix(string(b), "//go:build acceptance\n") {
-				t.Errorf("%s doesn't start with //go:build acceptance", f)
+				t.Errorf("tasks/%s/%s doesn't start with //go:build acceptance", k.Dir, f)
 			}
 		}
 	}
@@ -260,12 +295,14 @@ func TestStartsFail(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		tests, _ := goFiles(filepath.Join("../../tasks", k.Dir), true)
+		tests, _ := os.ReadDir(filepath.Join("../../tasks", k.Dir))
 		for _, f := range code {
 			copyFile(t, f, filepath.Join(root, c.Dir(), filepath.Base(f)))
 		}
-		for _, f := range tests {
-			copyFile(t, f, filepath.Join(root, "tasks", k.Dir, filepath.Base(f)))
+		for _, e := range tests {
+			if !e.IsDir() {
+				copyFile(t, filepath.Join("../../tasks", k.Dir, e.Name()), filepath.Join(root, "tasks", k.Dir, e.Name()))
+			}
 		}
 		v, err := Judge(root, c)
 		if err != nil {
