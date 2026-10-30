@@ -7,6 +7,9 @@ A scratch project for trying models and harnesses on small real tasks before rou
 - **cmd/score/**, **ledger.json** - The score and the ledger snapshot it reads (see Score)
 
 - **tasks/** - Fixed task set: each task's acceptance tests, and no answer
+  - Every task's tests are hidden (a `_test.go.gz`, which the score unzips), so a trial is
+    judged on how it reads the spec in `TASKS.md`, edges included, not on running the tests
+    until they're green
   - No reference implementation is kept here, so a trial can't copy one: the
     tests are the spec, behind the `acceptance` build tag so main's
     `go test ./...` doesn't build them without code
@@ -45,7 +48,7 @@ counts := wc.Count("Hello, WORLD! hello?")
 // counts == map[string]int{"hello": 2, "world": 1}
 ```
 
-Its acceptance tests: `tasks/wc/`
+Its acceptance tests: `tasks/wc/wc_test.go.gz`
 
 ### CSV Column Summer (csvsum)
 A tiny Go module that provides a function to sum numeric values from a specific column in a CSV file.
@@ -67,7 +70,7 @@ func main() {
 }
 ```
 
-Its acceptance tests: `tasks/csvsum/`
+Its acceptance tests: `tasks/csvsum/sum_test.go.gz`
 
 ### LRU Cache with TTL (lru)
 A thread-safe LRU cache with TTL support.
@@ -80,7 +83,7 @@ cache.Set("key", "value")
 val, ok := cache.Get("key")
 ```
 
-Its acceptance tests: `tasks/lru/`
+Its acceptance tests: `tasks/lru/lru_test.go.gz`
 
 ### Build Cache Fix (gocache)
 A bug fix in existing code, from real Hive work: the trial copies
@@ -95,7 +98,7 @@ c := gocache.Cache{Shared: "/cache/main", Own: "/cache/this-check"}
 err := c.Serve(os.Stdin, os.Stdout)
 ```
 
-Its acceptance tests: `tasks/gocache/`
+Its acceptance tests: `tasks/gocache/gocache_test.go.gz`
 
 ### Config Includes (config)
 A feature in existing code: the trial copies `tasks/config/_start/*.go` (an
@@ -188,6 +191,6 @@ To run a task's acceptance tests on a trial by hand, copy them beside its code
 and set the tag, as the score does:
 
 ```bash
-cp tasks/lru/*_test.go /tmp/t/ && for f in trials/open/<model>/lru/*.go.gz; do gunzip -c $f > /tmp/t/$(basename $f .gz); done   # then, in /tmp/t with a go.mod:
+gunzip -c tasks/lru/lru_test.go.gz > /tmp/t/lru_test.go && for f in trials/open/<model>/lru/*.go.gz; do gunzip -c $f > /tmp/t/$(basename $f .gz); done   # then, in /tmp/t with a go.mod:
 go test -race -tags acceptance .
 ```
