@@ -251,7 +251,7 @@ route. The starting code builds and fails them (`TestStartsFail`).
 
 Each trial runs in its own folder under `trials/<harness>/<model>/<task>/` so
 two trials never touch the same files: `trials/open/gpt-oss-120b/lru/`,
-`trials/codex/gpt-5/wc/`. Its code is in the package the task's tests name
+`trials/codex/default/wc/`. Its code is in the package the task's tests name
 (`package wc`, `package csvsum`, `package lru`, `package gocache`, `package config`, `package routeknob`), with the API above.
 
 A trial's verdict is whether that code passes the task's acceptance tests:

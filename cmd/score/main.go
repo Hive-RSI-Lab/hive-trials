@@ -46,9 +46,12 @@ import (
 // Native are the picks a harness runs on its own models, beside the named
 // models (which only the open harness runs: claude runs Anthropic models,
 // codex OpenAI's, cursor and opencode their own). Claude isn't here: the
-// Hive already knows it from all its other work.
+// Hive already knows it from all its other work. Codex runs on its login's
+// default model (the ledger's "codex:", in trials/codex/default/): gpt-5
+// isn't on this ChatGPT login (400 model_not_found, trial
+// 261027-183938-95b28472e8).
 var Native = []Pick{
-	{"codex", "gpt-5"},
+	{"codex", ""},
 	{"cursor", "auto"},
 	{"opencode", "opencode/big-pickle"},
 }
@@ -88,6 +91,10 @@ type Pick struct{ Harness, Model string }
 
 func (p Pick) String() string { return p.Harness + ":" + p.Model }
 
+// Default is the folder of a pick with no model: the harness on its login's
+// default model.
+const Default = "default"
+
 // Cell is one pick on one task.
 type Cell struct {
 	Pick
@@ -95,7 +102,13 @@ type Cell struct {
 }
 
 // Dir is where the cell's trial puts its code.
-func (c Cell) Dir() string { return filepath.Join("trials", c.Harness, c.Model, c.Task) }
+func (c Cell) Dir() string {
+	m := c.Model
+	if m == "" {
+		m = Default
+	}
+	return filepath.Join("trials", c.Harness, m, c.Task)
+}
 
 // Verdict is how a cell's code did on its acceptance tests; Ran is false
 // when there is no code to test.
