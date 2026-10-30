@@ -282,6 +282,28 @@
       "minutes": 444,
       "turns": 1,
       "review_rounds": 0
+    },
+    {
+      "task": "261029-082550-d334445073",
+      "model": "codex:",
+      "project": "trials",
+      "title": "gocache on codex/default (gocache)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 460,
+      "turns": 6,
+      "review_rounds": 0
+    },
+    {
+      "task": "261029-082557-27651993aa",
+      "model": "opencode:opencode/big-pickle",
+      "project": "trials",
+      "title": "gocache on opencode/opencode/big-pickle (gocache)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 453,
+      "turns": 1,
+      "review_rounds": 0
     }
   ]
 }

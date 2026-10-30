@@ -21,6 +21,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -232,7 +233,7 @@ func Judge(root string, c Cell) (Verdict, error) {
 	if err != nil || len(code) == 0 {
 		return Verdict{}, nil
 	}
-	tests, err := goFiles(filepath.Join(root, "tasks", c.Task), true)
+	tests, err := Acceptance(filepath.Join(root, "tasks", c.Task))
 	if err != nil {
 		return Verdict{}, err
 	}
@@ -241,12 +242,17 @@ func Judge(root string, c Cell) (Verdict, error) {
 		return Verdict{}, err
 	}
 	defer os.RemoveAll(dir)
-	for _, f := range append(code, tests...) {
+	for _, f := range code {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			return Verdict{}, err
 		}
 		if err := os.WriteFile(filepath.Join(dir, filepath.Base(f)), b, 0o644); err != nil {
+			return Verdict{}, err
+		}
+	}
+	for name, b := range tests {
+		if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
 			return Verdict{}, err
 		}
 	}
@@ -270,6 +276,49 @@ func Judge(root string, c Cell) (Verdict, error) {
 	default:
 		return Verdict{}, err
 	}
+}
+
+// Acceptance are a task folder's acceptance tests by file name: its
+// _test.go files, and its hidden ones, each a _test.go.gz that the score
+// unzips, so a trial that only reads TASKS.md and the starting code can't
+// read or grep them (a trial that unzips one has read the answer key).
+func Acceptance(dir string) (map[string][]byte, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]byte{}
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() {
+			continue
+		}
+		switch {
+		case strings.HasSuffix(n, "_test.go"):
+			b, err := os.ReadFile(filepath.Join(dir, n))
+			if err != nil {
+				return nil, err
+			}
+			out[n] = b
+		case strings.HasSuffix(n, "_test.go.gz"):
+			f, err := os.Open(filepath.Join(dir, n))
+			if err != nil {
+				return nil, err
+			}
+			z, err := gzip.NewReader(f)
+			if err == nil {
+				var b []byte
+				if b, err = io.ReadAll(z); err == nil {
+					out[strings.TrimSuffix(n, ".gz")] = b
+				}
+			}
+			f.Close()
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", n, err)
+			}
+		}
+	}
+	return out, nil
 }
 
 // goFiles are dir's .go files: the tests, or the rest.
