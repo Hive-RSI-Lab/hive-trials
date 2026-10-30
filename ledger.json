@@ -372,6 +372,28 @@
       "minutes": 137,
       "turns": 2,
       "review_rounds": 0
+    },
+    {
+      "task": "261030-162629-14adc8613e",
+      "model": "deepseek-v4-pro",
+      "project": "trials",
+      "title": "routeknob on open/deepseek-v4-pro (routeknob)",
+      "outcome": "merged",
+      "cost": 0.16716882650000003,
+      "minutes": 218,
+      "turns": 4,
+      "review_rounds": 0
+    },
+    {
+      "task": "261030-162641-97c278e434",
+      "model": "codex:",
+      "project": "trials",
+      "title": "routeknob on codex/default (routeknob)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 218,
+      "turns": 3,
+      "review_rounds": 0
     }
   ]
 }
