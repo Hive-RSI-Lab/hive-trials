@@ -6,10 +6,12 @@
 // in trials/<harness>/<model>/<task>/ on main, passes the task's acceptance
 // tests in tasks/<task>/. The score runs them itself, so a trial that
 // changed or dropped its own tests is judged the same. A trial that ended
-// on a Hive fault (a 403, a lead closing it, the warden leaving it open)
-// landed nothing and gives no verdict; nor does code in a cell's folder
-// that no trial of that cell landed (put there by hand, or by a trial on
-// another pick or task).
+// on a Hive fault (a 403, a missing key, a lead withdrawing it) landed
+// nothing and gives no verdict; nor does code in a cell's folder that no
+// trial of that cell landed (put there by hand, or by a trial on another
+// pick or task). A trial that the lead or the warden stopped for its pick's
+// own fault (see Fault: copying another's code, writing its own ledger
+// entry) is a fail verdict, since that is what routing needs to know.
 //
 // The ledger is ledger.json, a snapshot of `hive agent models`, saved with
 //
@@ -207,6 +209,41 @@ func Lands(trials []Trial) bool {
 		}
 	}
 	return false
+}
+
+// faultBy are the stop reasons of a lead or a warden, the only ones that
+// judge a trial's own work; faultFor is what in such a reason names the
+// pick's own fault.
+var (
+	faultBy  = regexp.MustCompile(`^(closed by the lead|left open: the warden):`)
+	faultFor = regexp.MustCompile(`(?i)\bcop(y|ied|ying)\b|ledger\.json|self-written`)
+)
+
+// Fault is a trial of the cell that a lead or warden stopped for the pick's
+// own fault: it copied another's code, or wrote its own ledger entry
+// (ledger.json) to score itself. ok is false when none was.
+func Fault(trials []Trial) (t Trial, ok bool) {
+	for _, t := range trials {
+		if t.Outcome == "stopped" && faultBy.MatchString(t.Reason) && faultFor.MatchString(t.Reason) &&
+			!strings.Contains(t.Reason, "Not a model result") {
+			return t, true
+		}
+	}
+	return Trial{}, false
+}
+
+// Verdicts judges a cell by its trials: a landed trial's code by judge, else
+// a pick's fault (see Fault) fails; a cell with neither has no verdict.
+func Verdicts(trials map[Cell][]Trial, judge func(Cell) Verdict) func(Cell) (Verdict, bool) {
+	return func(c Cell) (Verdict, bool) {
+		if Lands(trials[c]) {
+			return judge(c), true
+		}
+		if t, ok := Fault(trials[c]); ok {
+			return Verdict{Ran: true, Out: "the pick's fault: " + t.Reason}, true
+		}
+		return Verdict{}, false
+	}
 }
 
 // Score is the share of cells that a trial landed (by landed) and whose
@@ -603,13 +640,15 @@ func main() {
 	}
 	cells := Cells(l, tasks)
 	trials := TrialsOf(l, tasks)
-	s, vs := Score(cells, func(c Cell) bool { return Lands(trials[c]) }, func(c Cell) Verdict {
+	verdict := Verdicts(trials, func(c Cell) Verdict {
 		v, err := Judge(".", c)
 		if err != nil {
 			fail(fmt.Errorf("judging %s %s: %w", c.Pick, c.Task, err))
 		}
 		return v
 	})
+	judged := func(c Cell) bool { _, ok := verdict(c); return ok }
+	s, vs := Score(cells, judged, func(c Cell) Verdict { v, _ := verdict(c); return v })
 	if *verbose {
 		for _, c := range cells {
 			mark := "    "
@@ -622,7 +661,7 @@ func main() {
 			if v := vs[c]; v.Ran && !v.Pass {
 				fmt.Printf("       %s\n", line(why(v.Out), 120))
 			}
-			if !Lands(trials[c]) {
+			if !judged(c) {
 				if code, _ := Code(c.Dir()); len(code) > 0 {
 					fmt.Printf("       code in %s, but no trial of this cell landed it: not counted\n", c.Dir())
 				}
@@ -644,7 +683,7 @@ func main() {
 			trialNoCode := 0
 			trialMergedCells := 0
 			for _, c := range cells {
-				if c.Pick == p && Lands(trials[c]) {
+				if c.Pick == p && judged(c) {
 					trialMergedCells++
 					v := vs[c]
 					if v.Ran {
@@ -665,7 +704,7 @@ func main() {
 			fmt.Printf("  %s: trials=%d(merged=%d stopped=%d blocked=%d done=%d) demoted=%v deck=%d\n",
 				p, wr.TrialsTotal, wr.TrialsMerged, wr.TrialsStopped, wr.TrialsBlocked, wr.TrialsDone, wr.Demoted, wr.DeckPosition)
 			if trialMergedCells > 0 {
-				fmt.Printf("       trial verdicts: %d merged cells, %d pass, %d fail, %d no-code\n",
+				fmt.Printf("       trial verdicts: %d judged cells, %d pass, %d fail, %d no-code\n",
 					trialMergedCells, trialPass, trialFail, trialNoCode)
 				if trialFail > 0 {
 					fmt.Printf("       ^^^ %d merged cell(s) failed acceptance tests\n", trialFail)

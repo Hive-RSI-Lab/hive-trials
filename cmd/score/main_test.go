@@ -518,3 +518,51 @@ func copyFile(t *testing.T, from, to string) {
 		t.Fatal(err)
 	}
 }
+
+func TestFault(t *testing.T) {
+	for _, tc := range []struct {
+		trial Trial
+		want  bool
+	}{
+		{Trial{Outcome: "stopped", Reason: "closed by the lead: this trial's files match main's; its account says it copied the reference code"}, true},
+		{Trial{Outcome: "stopped", Reason: "left open: the warden: the PR's ledger.json hunk is a self-written entry"}, true},
+		{Trial{Outcome: "stopped", Reason: "left open"}, false},
+		{Trial{Outcome: "stopped", Reason: "closed by the lead: Trial worker went quiet and never finished. Closing to free its slot."}, false},
+		{Trial{Outcome: "stopped", Reason: "withdrawn by lead-x: misfiled, copied the wrong model into ledger.json"}, false}, // a Hive fault
+		{Trial{Outcome: "blocked", Reason: "stopped while quiet by lead-x: no API key stored. Not a model result."}, false},
+		{Trial{Outcome: "merged", Reason: "closed by the lead: copied"}, false},
+	} {
+		if _, got := Fault([]Trial{tc.trial}); got != tc.want {
+			t.Errorf("Fault(%q %q) = %v, want %v", tc.trial.Outcome, tc.trial.Reason, got, tc.want)
+		}
+	}
+}
+
+func TestVerdicts(t *testing.T) {
+	landed := Cell{Pick{"open", "a"}, "wc"}
+	faulted := Cell{Pick{"open", "a"}, "lru"}
+	both := Cell{Pick{"open", "b"}, "wc"}
+	none := Cell{Pick{"open", "b"}, "lru"}
+	copied := Trial{Outcome: "stopped", Reason: "closed by the lead: it copied another trial's code"}
+	trials := map[Cell][]Trial{
+		landed:  {{Outcome: "merged"}},
+		faulted: {copied},
+		both:    {copied, {Outcome: "merged"}},
+		none:    {{Outcome: "stopped", Reason: "withdrawn by lead-x: the key allows only :free models"}},
+	}
+	verdict := Verdicts(trials, func(Cell) Verdict { return Verdict{Ran: true, Pass: true} })
+	for _, tc := range []struct {
+		c             Cell
+		ok, ran, pass bool
+	}{
+		{landed, true, true, true},
+		{faulted, true, true, false}, // the pick's own fault fails
+		{both, true, true, true},     // a later trial's landed code is judged
+		{none, false, false, false},  // a Hive fault gives no verdict
+	} {
+		v, ok := verdict(tc.c)
+		if ok != tc.ok || v.Ran != tc.ran || v.Pass != tc.pass {
+			t.Errorf("%v: verdict %+v %v, want ran=%v pass=%v %v", tc.c, v, ok, tc.ran, tc.pass, tc.ok)
+		}
+	}
+}
