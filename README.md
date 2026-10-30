@@ -25,11 +25,13 @@ A scratch project for trying models and harnesses on small real tasks before rou
   - Example: `trials/open/deepseek-v4-pro/wc/`, `trials/codex/gpt-5/csvsum/`
   - A trial writes only under its own folder
   - A trial's verdict is whether this code passes the task's acceptance tests (see Score)
-  - A trial lands its code sealed: `go run ./cmd/score -seal trials/<harness>/<model>/<task>`
-    zips each `.go` file into a `.go.gz`, so a later trial of the same task can't read or
-    grep this one's answer in its checkout; `go test ./...` fails on plain code under `trials/`
+  - A trial's code is sealed on main: `go run ./cmd/score -seal` zips each `.go` file of a
+    plain trial folder into a `.go.gz`, so a later trial of the same task can't read or grep
+    this one's answer in its checkout. A trial lands plain code; `.github/workflows/seal.yml`
+    seals it on main right after the merge, and `go test ./...` fails on a folder left plain
+    once the ledger shows its trial merged
 
-- **Main project tests** - Main runs `go test ./...` (the test command in `.hive/project.json`): the score's tests, which fail on any trial code left unsealed; the acceptance tests run only through the score
+- **Main project tests** - Main runs `go test ./...` (the test command in `.hive/project.json`): the score's tests, which fail on a landed trial's code left unsealed; the acceptance tests run only through the score
 
 ## Tasks
 
@@ -160,7 +162,7 @@ hive agent models | go run ./cmd/score -save   # writes ledger.json, prints the 
 go run ./cmd/score -v                           # every cell: pass, fail or none, unlanded code, and its trials' outcome, reason, minutes, turns, cost
 ```
 
-A trial's PR adds only its `trials/<harness>/<model>/<task>/` code, sealed, and never
+A trial's PR adds only its `trials/<harness>/<model>/<task>/` code and never
 edits `ledger.json`, which is refreshed from the record after the trial ends.
 
 Each new verdict (pass or fail) then goes to the knowledge base as a routing

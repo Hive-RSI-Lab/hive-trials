@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
@@ -243,21 +244,46 @@ func TestJudgeSealed(t *testing.T) {
 	}
 }
 
-// No trial's code sits plain on main: each is sealed, so a trial can't read
-// or grep another trial's answer to its task in its checkout.
+// No landed trial's code sits plain on main: each is sealed, so a trial
+// can't read or grep another trial's answer to its task in its checkout.
+// A folder whose trial is still in flight (no trial of its cell has merged
+// in ledger.json) may be plain: its own PR, and main between its merge and
+// the seal workflow (.github/workflows/seal.yml) sealing it.
 func TestTrialsSealed(t *testing.T) {
-	err := filepath.WalkDir("../../trials", func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() && strings.HasSuffix(path, ".go") {
-			dir, _ := filepath.Rel("../..", filepath.Dir(path))
-			t.Errorf("%s is plain code another trial could copy: seal its folder with `go run ./cmd/score -seal %s` and commit the .go.gz files", strings.TrimPrefix(path, "../../"), dir)
-		}
-		return nil
-	})
+	raw, err := os.ReadFile("../../ledger.json")
 	if err != nil {
 		t.Fatal(err)
+	}
+	var l Ledger
+	if err := json.Unmarshal(raw, &l); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := Tasks("../../tasks", "../../TASKS.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	trials := TrialsOf(l, tasks)
+	for _, dir := range Plain("../..") {
+		if c, ok := CellOf(dir); ok && Lands(trials[c]) {
+			t.Errorf("%s holds plain code another trial could copy, and its trial has landed: seal it with `go run ./cmd/score -seal %s` (.github/workflows/seal.yml does on main) and commit the .go.gz files", dir, dir)
+		}
+	}
+}
+
+func TestCellOf(t *testing.T) {
+	for _, tc := range []struct {
+		dir  string
+		want Cell
+		ok   bool
+	}{
+		{"trials/open/laguna-free/wc", Cell{Pick{"open", "laguna-free"}, "wc"}, true},
+		{"trials/opencode/opencode/big-pickle/gocache", Cell{Pick{"opencode", "opencode/big-pickle"}, "gocache"}, true},
+		{"trials/open/wc", Cell{}, false},
+		{"tasks/wc/x/y", Cell{}, false},
+	} {
+		if got, ok := CellOf(tc.dir); got != tc.want || ok != tc.ok {
+			t.Errorf("CellOf(%q) = %v %v, want %v %v", tc.dir, got, ok, tc.want, tc.ok)
+		}
 	}
 }
 

@@ -373,6 +373,37 @@ func Seal(dir string) error {
 	return nil
 }
 
+// Plain are the folders under root/trials that hold plain .go files, each
+// relative to root (say "trials/open/m/wc"), in order.
+func Plain(root string) []string {
+	seen := map[string]bool{}
+	var out []string
+	filepath.WalkDir(filepath.Join(root, "trials"), func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		dir, _ := filepath.Rel(root, filepath.Dir(path))
+		if !seen[dir] {
+			seen[dir] = true
+			out = append(out, filepath.ToSlash(dir))
+		}
+		return nil
+	})
+	sort.Strings(out)
+	return out
+}
+
+// CellOf is the cell whose trial writes to dir, trials/<harness>/<model>/<task>
+// (a model may have a slash in it, as opencode/big-pickle does).
+func CellOf(dir string) (Cell, bool) {
+	parts := strings.Split(filepath.ToSlash(dir), "/")
+	if len(parts) < 4 || parts[0] != "trials" {
+		return Cell{}, false
+	}
+	n := len(parts)
+	return Cell{Pick{parts[1], strings.Join(parts[2:n-1], "/")}, parts[n-1]}, true
+}
+
 // gunzip is the unzipped content of the file at path.
 func gunzip(path string) ([]byte, error) {
 	f, err := os.Open(path)
@@ -521,20 +552,22 @@ func main() {
 	save := flag.Bool("save", false, "save `hive agent models` output on stdin as the ledger")
 	verbose := flag.Bool("v", false, "list every cell: its verdict and how its trials went")
 	ledger := flag.String("ledger", "ledger.json", "the ledger snapshot")
-	seal := flag.Bool("seal", false, "seal the trial folders named as arguments (see Seal) and exit")
+	seal := flag.Bool("seal", false, "seal the trial folders named as arguments, or every one holding plain code (see Seal), and exit")
 	flag.Parse()
 	fail := func(err error) {
 		fmt.Fprintln(os.Stderr, "score:", err)
 		os.Exit(1)
 	}
 	if *seal {
-		if flag.NArg() == 0 {
-			fail(errors.New("-seal: name the trial folders to seal, say trials/open/<model>/<task>"))
+		dirs := flag.Args()
+		if len(dirs) == 0 {
+			dirs = Plain(".")
 		}
-		for _, dir := range flag.Args() {
+		for _, dir := range dirs {
 			if err := Seal(dir); err != nil {
 				fail(err)
 			}
+			fmt.Println("sealed", dir)
 		}
 		return
 	}
