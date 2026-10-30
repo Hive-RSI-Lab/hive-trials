@@ -271,6 +271,61 @@ func TestSave(t *testing.T) {
 	}
 }
 
+func TestWorkerRecord(t *testing.T) {
+	l := Ledger{
+		Models: map[string]string{"openrouter": "nvidia/nemotron-3-ultra-550b-a55b:free at https://openrouter.ai/api/v1"},
+		Trials: []Trial{
+			{Task: "1", Model: "openrouter", Project: "trials", Title: "wc", Outcome: "merged"},
+			{Task: "2", Model: "openrouter", Project: "trials", Title: "csvsum", Outcome: "merged"},
+			{Task: "3", Model: "openrouter", Project: "trials", Title: "lru", Outcome: "merged"},
+			{Task: "4", Model: "openrouter", Project: "trials", Title: "gocache", Outcome: "merged"},
+			{Task: "5", Model: "openrouter", Project: "deck", Title: "some task", Outcome: "blocked"},
+			{Task: "6", Model: "openrouter", Project: "deck", Title: "some task", Outcome: "blocked"},
+		},
+		Demoted: []string{"open:openrouter on deck goes after the rest of its worker route: its last 2 worker tasks here ended blocked without a merge"},
+		Routes:  map[string][]string{"worker": {"open:openrouter", "claude:opus"}},
+	}
+	p := Pick{"open", "openrouter"}
+	wr := workerRecord(l, p)
+	if wr.TrialsTotal != 6 {
+		t.Errorf("TrialsTotal = %d, want 6", wr.TrialsTotal)
+	}
+	if wr.TrialsMerged != 4 {
+		t.Errorf("TrialsMerged = %d, want 4", wr.TrialsMerged)
+	}
+	if wr.TrialsBlocked != 2 {
+		t.Errorf("TrialsBlocked = %d, want 2", wr.TrialsBlocked)
+	}
+	if !wr.Demoted {
+		t.Errorf("Demoted = false, want true")
+	}
+	if wr.DeckPosition != 1 {
+		t.Errorf("DeckPosition = %d, want 1", wr.DeckPosition)
+	}
+
+	// Test a pick with failing trial verdicts
+	l2 := Ledger{
+		Models: map[string]string{"modelx": "modelx at somewhere"},
+		Trials: []Trial{
+			{Task: "1", Model: "modelx", Project: "trials", Title: "wc", Outcome: "merged"},
+		},
+	}
+	p2 := Pick{"open", "modelx"}
+	wr2 := workerRecord(l2, p2)
+	if wr2.TrialsTotal != 1 {
+		t.Errorf("TrialsTotal = %d, want 1", wr2.TrialsTotal)
+	}
+	if wr2.TrialsMerged != 1 {
+		t.Errorf("TrialsMerged = %d, want 1", wr2.TrialsMerged)
+	}
+	if wr2.Demoted {
+		t.Errorf("Demoted = true, want false")
+	}
+	if wr2.DeckPosition != 0 {
+		t.Errorf("DeckPosition = %d, want 0", wr2.DeckPosition)
+	}
+}
+
 // A bug-fix task's starting code (tasks/<task>/_start, which go ignores) is
 // what a trial copies and fixes: it builds and fails the acceptance tests,
 // so landing it unchanged is a fail, not a pass.

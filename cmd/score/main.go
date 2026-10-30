@@ -65,10 +65,16 @@ type Trial struct {
 }
 
 // Ledger is what the score reads from `hive agent models`: the named models
-// and the trials.
+// and the trials, plus the worker record fields (demoted, etc.).
 type Ledger struct {
-	Models map[string]string `json:"models"`
-	Trials []Trial           `json:"trials"`
+	Models        map[string]string `json:"models"`
+	Trials        []Trial           `json:"trials"`
+	Demoted       []string          `json:"demoted,omitempty"`
+	Agents        []string          `json:"agents,omitempty"`
+	Routes        map[string][]string `json:"routes,omitempty"`
+	TrialsNotCounted []Trial        `json:"trials_not_counted,omitempty"`
+	TrialsRunning   []string         `json:"trials_running,omitempty"`
+	Unavailable     interface{}      `json:"unavailable,omitempty"`
 }
 
 // Task is one task of the fixed set: its folder under tasks/ and its name in
@@ -354,6 +360,12 @@ func Save(r io.Reader, path string) error {
 		}
 	}
 	l.Trials = kept
+	l.Agents = nil
+	l.Routes = nil
+	l.Demoted = nil
+	l.TrialsNotCounted = nil
+	l.TrialsRunning = nil
+	l.Unavailable = nil
 	b, err := json.MarshalIndent(l, "", "  ")
 	if err != nil {
 		return err
@@ -361,13 +373,55 @@ func Save(r io.Reader, path string) error {
 	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
-// line is s's first line, at most n runes.
-func line(s string, n int) string {
-	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
-	if r := []rune(s); len(r) > n {
-		return string(r[:n-1]) + "…"
+// WorkerRecord is a pick's standing from hive agent models across all projects.
+type WorkerRecord struct {
+	Pick            Pick
+	TrialsTotal     int
+	TrialsMerged    int
+	TrialsStopped   int
+	TrialsBlocked   int
+	TrialsDone      int
+	Demoted         bool
+	DeckPosition    int // 1-based index in the deck, 0 = not in deck
+}
+
+func workerRecord(l Ledger, p Pick) WorkerRecord {
+	wr := WorkerRecord{Pick: p}
+	for _, tr := range l.Trials {
+		// PickOf handles both named models and harness:model format
+		tp := PickOf(tr.Model, l.Models)
+		if tp.Harness == p.Harness && tp.Model == p.Model {
+			wr.TrialsTotal++
+			switch tr.Outcome {
+			case "merged":
+				wr.TrialsMerged++
+			case "stopped":
+				wr.TrialsStopped++
+			case "blocked":
+				wr.TrialsBlocked++
+			case "done":
+				wr.TrialsDone++
+			}
+		}
 	}
-	return s
+	// Check if demoted
+	for _, d := range l.Demoted {
+		// d is like "open:openrouter on deck goes after the rest of its worker route: ..."
+		if len(d) >= len(p.String()) && d[:len(p.String())] == p.String() {
+			wr.Demoted = true
+			break
+		}
+	}
+	// Check deck position (from routes.worker)
+	if routes, ok := l.Routes["worker"]; ok {
+		for i, r := range routes {
+			if r == p.String() {
+				wr.DeckPosition = i + 1
+				break
+			}
+		}
+	}
+	return wr
 }
 
 // why is the line of go test's output that says why it failed: the first
@@ -379,6 +433,15 @@ func why(out string) string {
 		}
 	}
 	return out
+}
+
+// line is s's first line, at most n runes.
+func line(s string, n int) string {
+	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
+	if r := []rune(s); len(r) > n {
+		return string(r[:n-1]) + "…"
+	}
+	return s
 }
 
 func main() {
@@ -438,44 +501,53 @@ func main() {
 			}
 		}
 
-		// Per-pick summary: verdicts vs worker record (ledger outcomes)
+		// Per-pick summary: trial verdicts vs worker record (from hive agent models)
 		fmt.Println()
-		fmt.Println("Per-pick verdicts vs worker record:")
-		pickVerdicts := map[Pick]struct{ pass, fail, noCode, merged int }{}
-		for _, c := range cells {
-			p := c.Pick
-			stats := pickVerdicts[p]
-			landed := Lands(trials[c])
-			if landed {
-				stats.merged++
-				v := vs[c]
-				if v.Ran {
-					if v.Pass {
-						stats.pass++
-					} else {
-						stats.fail++
-					}
-				} else {
-					stats.noCode++
-				}
-			}
-			pickVerdicts[p] = stats
-		}
+		fmt.Println("Per-pick trial verdicts vs worker record:")
 		picks := Picks(l.Models)
 		for _, p := range picks {
-			stats := pickVerdicts[p]
-			if stats.merged == 0 {
-				fmt.Printf("  %s: no merged trials\n", p)
+			wr := workerRecord(l, p)
+			// Count trial verdicts for this pick
+			trialPass := 0
+			trialFail := 0
+			trialNoCode := 0
+			trialMergedCells := 0
+			for _, c := range cells {
+				if c.Pick == p && Lands(trials[c]) {
+					trialMergedCells++
+					v := vs[c]
+					if v.Ran {
+						if v.Pass {
+							trialPass++
+						} else {
+							trialFail++
+						}
+					} else {
+						trialNoCode++
+					}
+				}
+			}
+			if trialMergedCells == 0 && wr.TrialsTotal == 0 {
+				fmt.Printf("  %s: no data\n", p)
 				continue
 			}
-			agree := stats.pass
-			disagree := stats.fail
-			noCode := stats.noCode
-			fmt.Printf("  %s: %d merged, %d pass, %d fail, %d no-code\n", p, stats.merged, agree, disagree, noCode)
-			if disagree > 0 {
-				fmt.Printf("       ^^^ %d merged trial(s) failed acceptance tests\n", disagree)
-			} else if agree > 0 {
-				fmt.Printf("       all %d merged trial(s) pass\n", agree)
+			fmt.Printf("  %s: trials=%d(merged=%d stopped=%d blocked=%d done=%d) demoted=%v deck=%d\n",
+				p, wr.TrialsTotal, wr.TrialsMerged, wr.TrialsStopped, wr.TrialsBlocked, wr.TrialsDone, wr.Demoted, wr.DeckPosition)
+			if trialMergedCells > 0 {
+				fmt.Printf("       trial verdicts: %d merged cells, %d pass, %d fail, %d no-code\n",
+					trialMergedCells, trialPass, trialFail, trialNoCode)
+				if trialFail > 0 {
+					fmt.Printf("       ^^^ %d merged cell(s) failed acceptance tests\n", trialFail)
+				} else if trialPass > 0 {
+					fmt.Printf("       all %d merged cell(s) pass\n", trialPass)
+				}
+			}
+			// Flag the gap: trials say pass but worker record shows demoted/blocked
+			if wr.Demoted && trialFail == 0 && trialPass > 0 {
+				fmt.Printf("       *** GAP: trials pass but demoted on deck\n")
+			}
+			if wr.TrialsBlocked > 0 && trialFail == 0 && trialPass > 0 {
+				fmt.Printf("       *** GAP: trials pass but %d blocked trial(s) in worker record\n", wr.TrialsBlocked)
 			}
 		}
 	}
