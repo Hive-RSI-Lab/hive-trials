@@ -18,6 +18,8 @@ A scratch project for trying models and harnesses on small real tasks before rou
   - `config/` - Config Includes: an `include` directive added across three files of a
     small config reader in `config/_start/`, judged by hidden acceptance tests
     (`config_test.go.gz`, which the score unzips) on edges the spec leaves to the reader
+  - `routeknob/` - Route Knob Takeover: a one-function bug fix in a copy of the deck's
+    soft takeover (`routeknob/_start/`), from real deck work, judged by hidden tests
 
 - **trials/<harness>/<model>/<task>/** - Each trial runs in its own isolated folder so two trials never touch the same files
   - Example: `trials/open/deepseek-v4-pro/wc/`, `trials/codex/gpt-5/csvsum/`
@@ -105,6 +107,21 @@ host, ok := c.Get("db.host")
 ```
 
 Its acceptance tests: `tasks/config/config_test.go.gz`
+
+### Route Knob Takeover (routeknob)
+A bug fix in one function, from the deck: the trial copies
+`tasks/routeknob/_start/knob.go` (a route knob's soft takeover) into its
+folder and fixes it so a knob acts at once when the Hive's route isn't one
+of its stops, keeping the rest as it is. Its acceptance tests are hidden.
+
+```go
+// in trials/<harness>/<model>/routeknob/, package routeknob
+
+var k routeknob.Knob
+act, prompt := k.Move(3, -1) // the Hive's route is off the knob: act == true
+```
+
+Its acceptance tests: `tasks/routeknob/routeknob_test.go.gz`
 
 ## Score
 
