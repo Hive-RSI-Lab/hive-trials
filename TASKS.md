@@ -1,6 +1,6 @@
 # Fixed Task Set
 
-This file defines the six fixed small tasks used for trials. Each task's acceptance tests are under `tasks/<task>/`; no reference implementation is kept in the repo, so a trial can't copy the answer. The first three are written from scratch; the fourth and sixth are bug fixes and the fifth a feature in existing code, which the task gives in `tasks/<task>/_start/` (a folder go ignores, so main never builds it). The tests carry the `acceptance` build tag and run only through `go run ./cmd/score`, against a trial's code.
+This file defines the six fixed small tasks used for trials. Each task's acceptance tests are under `tasks/<task>/`, hidden: gzipped (`*_test.go.gz`), which the score unzips. Don't open them: a trial is judged on how it reads its task's spec here (and its starting code), edges included, as real work is, so it can fail. No reference implementation is kept in the repo, so a trial can't copy the answer. The first three are written from scratch; the fourth and sixth are bug fixes and the fifth a feature in existing code, which the task gives in `tasks/<task>/_start/` (a folder go ignores, so main never builds it). The tests carry the `acceptance` build tag and run only through `go run ./cmd/score`, against a trial's code.
 
 ## 1. Word Counter (wc)
 
@@ -13,16 +13,14 @@ This file defines the six fixed small tasks used for trials. Each task's accepta
 func Count(s string) map[string]int
 ```
 
-**Acceptance Tests:** `tasks/wc/wc_test.go`
-- Empty input returns empty map
-- Single word
-- Multiple words
-- Case insensitive (Hello HELLO hello → hello: 3)
-- With punctuation (hello, world! → hello: 1, world: 1)
-- Mixed punctuation and case
-- Numbers and symbols ignored (hello123 world456 → hello: 1, world: 1)
-- Only punctuation returns empty map
-- Unicode letters (Café, CAFÉ naïve → café: 2, naïve: 1)
+**Behavior:**
+- A word is a run of letters (`unicode.IsLetter`); anything else (space,
+  punctuation, digits, symbols) ends it
+- Words are counted lower-cased (Hello HELLO hello → hello: 3)
+- Input with no letters returns an empty map
+
+**Acceptance Tests:** hidden, in `tasks/wc/wc_test.go.gz`. They test empty
+input, case, punctuation, digits, whitespace and Unicode.
 
 **Run:** `go run ./cmd/score -v` (judges every trial of it)
 
@@ -46,13 +44,9 @@ func Sum(r io.Reader, column string) (float64, error)
 - Empty input (no header) returns 0 with no error
 - Returns error if column is missing or contains non-numeric data
 
-**Acceptance Tests:** `tasks/csvsum/sum_test.go`
-- Normal operation with numeric values
-- Missing column returns error
-- Bad number (non-numeric) returns error
-- Empty file returns 0, no error
-- Empty cell counts as zero
-- Header only (no data rows) returns 0
+**Acceptance Tests:** hidden, in `tasks/csvsum/sum_test.go.gz`. They test
+sums, missing columns, bad numbers, empty input and cells, and CSV as CSV is
+written.
 
 **Run:** `go run ./cmd/score -v` (judges every trial of it)
 
@@ -83,14 +77,11 @@ func (c *Cache) setClockForTest(clock Clock)
 - Thread-safe with RWMutex
 - Expired entries removed on Get or on Set when at capacity
 - Update (Set on existing key) resets TTL and moves to front (most recent)
-- Get moves entry to front (most recent)
+- Get moves entry to front (most recent); it does not reset TTL
 
-**Acceptance Tests:** `tasks/lru/lru_test.go`
-- LRU eviction order (basic eviction, access updates recency, update in place updates recency, no eviction when under capacity)
-- Exact LRU order verification
-- TTL expiry (entry expires after TTL, access does not reset TTL, update resets TTL, zero TTL means no expiry, expired entry removed from cache, Set evicts expired entries before LRU when at capacity)
-- Update in place (update existing key keeps it in cache, update moves to front)
-- Concurrent access safety (run with `go test -race`)
+**Acceptance Tests:** hidden, in `tasks/lru/lru_test.go.gz`. They test LRU
+order, TTL expiry, updates, capacity limits and concurrent use (under
+`go test -race`), through the API above.
 
 **Run:** `go run ./cmd/score -v` (judges every trial of it)
 
@@ -130,15 +121,9 @@ func Put(dir string, action, output, body []byte) (string, error)
 4. An output file cut short (a full disk, a killed copy) is served, and the
    build fails on a corrupt object instead of rebuilding.
 
-**Acceptance Tests:** `tasks/gocache/gocache_test.go`
-- Handshake names get, put and close
-- Put then get through Serve; nothing written to the shared folder
-- Empty put; body size mismatch; unknown command; input ending without close
-- Own folder before the shared one
-- Entries go's own GOCACHE layout wrote, for IDs starting 00, 0a, 0f, 10, ff; Put lays out the same way
-- Cut-short, missing and folder outputs miss
-- Malformed entries (version, action, newline, output ID, size, fields) miss
-- Put rejects bad IDs
+**Acceptance Tests:** hidden, in `tasks/gocache/gocache_test.go.gz`. They
+test the protocol, the four bug reports, go's own GOCACHE layout, and
+entries and outputs that should miss.
 
 The starting code builds and passes every test but the four bug reports'
 (`TestStartsFail` in `cmd/score` checks that it fails), so landing it
@@ -255,7 +240,7 @@ two trials never touch the same files: `trials/open/gpt-oss-120b/lru/`,
 (`package wc`, `package csvsum`, `package lru`, `package gocache`, `package config`, `package routeknob`), with the API above.
 
 A trial's verdict is whether that code passes the task's acceptance tests:
-`go run ./cmd/score` runs `tasks/<task>/*_test.go` against it, so the
+`go run ./cmd/score` runs `tasks/<task>/*_test.go.gz`, unzipped, against it, so the
 trial's own tests, if any, don't decide it. See the README's Score.
 
 A trial's code is sealed on main right after it lands (`go run ./cmd/score

@@ -339,6 +339,11 @@ func TestNoAnswers(t *testing.T) {
 		if len(tests) == 0 {
 			t.Errorf("tasks/%s has no acceptance tests", k.Dir)
 		}
+		// Every task's tests are hidden, so a trial can't run them until
+		// they're green and a pick can fail on how it reads the spec.
+		if plain, _ := filepath.Glob(filepath.Join(dir, "*_test.go")); len(plain) > 0 {
+			t.Errorf("tasks/%s has acceptance tests a trial can read: %v; gzip them (a _test.go.gz)", k.Dir, plain)
+		}
 		for f, b := range tests {
 			if !strings.HasPrefix(string(b), "//go:build acceptance\n") {
 				t.Errorf("tasks/%s/%s doesn't start with //go:build acceptance", k.Dir, f)
