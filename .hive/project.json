@@ -1,5 +1,8 @@
 {
   "test": "go test ./...",
   "ledger": "ledger.json",
-  "score": {"command": "go run ./cmd/score", "direction": "higher", "tolerance": 0, "paths": ["cmd/score/", "ledger.json", "tasks/", "TASKS.md"]}
+  "score": {"command": "go run ./cmd/score", "direction": "higher", "tolerance": 0, "paths": ["cmd/score/", "ledger.json", "tasks/", "TASKS.md"]},
+  "forge_tests": [
+    "test (ubuntu-latest)"
+  ]
 }

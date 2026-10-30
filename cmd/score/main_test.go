@@ -326,6 +326,101 @@ func TestSave(t *testing.T) {
 	if strings.Contains(s, "deck") || strings.Contains(s, "agents") {
 		t.Errorf("saved ledger:\n%s", s)
 	}
+
+	// Save keeps demoted and routes (for the verbose summary), drops the rest
+	in2 := `{"agents": ["x"], "models": {"openrouter": "openrouter at somewhere"}, "trials": [
+		{"model": "openrouter", "project": "trials", "title": "wc", "outcome": "merged", "task": "1"}],
+		"demoted": ["open:openrouter on deck goes after the rest of its worker route: its last 2 worker tasks here ended blocked without a merge"],
+		"routes": {"worker": ["open:openrouter", "claude:opus"]},
+		"trials_running": ["something"],
+		"trials_not_counted": [],
+		"unavailable": {"foo": "bar"}}`
+	path2 := filepath.Join(t.TempDir(), "ledger2.json")
+	if err := Save(strings.NewReader(in2), path2); err != nil {
+		t.Fatal(err)
+	}
+	b2, _ := os.ReadFile(path2)
+	s2 := string(b2)
+	// demoted and routes survive
+	if !strings.Contains(s2, "demoted") || !strings.Contains(s2, "open:openrouter on deck") {
+		t.Errorf("saved ledger lost demoted:\n%s", s2)
+	}
+	if !strings.Contains(s2, "routes") || !strings.Contains(s2, "worker") || !strings.Contains(s2, "open:openrouter") {
+		t.Errorf("saved ledger lost routes:\n%s", s2)
+	}
+	// agents, trials_running, trials_not_counted, unavailable are dropped
+	for _, dropped := range []string{"agents", "trials_running", "trials_not_counted", "unavailable"} {
+		if strings.Contains(s2, dropped) {
+			t.Errorf("saved ledger kept %s:\n%s", dropped, s2)
+		}
+	}
+}
+
+func TestWorkerRecord(t *testing.T) {
+	l := Ledger{
+		Models: map[string]string{"openrouter": "nvidia/nemotron-3-ultra-550b-a55b:free at https://openrouter.ai/api/v1"},
+		Trials: []Trial{
+			{Task: "1", Model: "openrouter", Project: "trials", Title: "wc", Outcome: "merged"},
+			{Task: "2", Model: "openrouter", Project: "trials", Title: "csvsum", Outcome: "merged"},
+			{Task: "3", Model: "openrouter", Project: "trials", Title: "lru", Outcome: "merged"},
+			{Task: "4", Model: "openrouter", Project: "trials", Title: "gocache", Outcome: "merged"},
+			{Task: "5", Model: "openrouter", Project: "deck", Title: "some task", Outcome: "blocked"},
+			{Task: "6", Model: "openrouter", Project: "deck", Title: "some task", Outcome: "blocked"},
+		},
+		Demoted: []string{"open:openrouter on deck goes after the rest of its worker route: its last 2 worker tasks here ended blocked without a merge"},
+		Routes:  map[string][]string{"worker": {"open:openrouter", "claude:opus"}},
+	}
+	p := Pick{"open", "openrouter"}
+	wr := workerRecord(l, p)
+	if wr.TrialsTotal != 6 {
+		t.Errorf("TrialsTotal = %d, want 6", wr.TrialsTotal)
+	}
+	if wr.TrialsMerged != 4 {
+		t.Errorf("TrialsMerged = %d, want 4", wr.TrialsMerged)
+	}
+	if wr.TrialsBlocked != 2 {
+		t.Errorf("TrialsBlocked = %d, want 2", wr.TrialsBlocked)
+	}
+	if !wr.Demoted {
+		t.Errorf("Demoted = false, want true")
+	}
+	if wr.DeckPosition != 1 {
+		t.Errorf("DeckPosition = %d, want 1", wr.DeckPosition)
+	}
+
+	// Test a pick with failing trial verdicts
+	l2 := Ledger{
+		Models: map[string]string{"modelx": "modelx at somewhere"},
+		Trials: []Trial{
+			{Task: "1", Model: "modelx", Project: "trials", Title: "wc", Outcome: "merged"},
+		},
+	}
+	p2 := Pick{"open", "modelx"}
+	wr2 := workerRecord(l2, p2)
+	if wr2.TrialsTotal != 1 {
+		t.Errorf("TrialsTotal = %d, want 1", wr2.TrialsTotal)
+	}
+	if wr2.TrialsMerged != 1 {
+		t.Errorf("TrialsMerged = %d, want 1", wr2.TrialsMerged)
+	}
+	if wr2.Demoted {
+		t.Errorf("Demoted = true, want false")
+	}
+	if wr2.DeckPosition != 0 {
+		t.Errorf("DeckPosition = %d, want 0", wr2.DeckPosition)
+	}
+
+	// A demoted pick whose name starts with another's doesn't demote the shorter one
+	l3 := Ledger{
+		Models:  map[string]string{"openrouter": "x at y", "openrouter-big": "z at y"},
+		Demoted: []string{"open:openrouter-big on deck goes after the rest of its worker route: ..."},
+	}
+	if workerRecord(l3, Pick{"open", "openrouter"}).Demoted {
+		t.Errorf("open:openrouter demoted by open:openrouter-big's line")
+	}
+	if !workerRecord(l3, Pick{"open", "openrouter-big"}).Demoted {
+		t.Errorf("open:openrouter-big not demoted")
+	}
 }
 
 // A bug-fix task's starting code (tasks/<task>/_start, which go ignores) is
