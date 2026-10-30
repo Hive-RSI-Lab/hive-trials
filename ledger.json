@@ -304,6 +304,39 @@
       "minutes": 453,
       "turns": 1,
       "review_rounds": 0
+    },
+    {
+      "task": "261030-014435-943a51aba7",
+      "model": "qwen3-coder-next",
+      "project": "trials",
+      "title": "gocache on open/qwen3-coder-next (gocache)",
+      "outcome": "merged",
+      "cost": 0.67007028,
+      "minutes": 87,
+      "turns": 1,
+      "review_rounds": 0
+    },
+    {
+      "task": "261030-014456-196a4704f7",
+      "model": "deepseek-v4-pro",
+      "project": "trials",
+      "title": "gocache on open/deepseek-v4-pro (gocache)",
+      "outcome": "merged",
+      "cost": 0.4813718892,
+      "minutes": 70,
+      "turns": 6,
+      "review_rounds": 0
+    },
+    {
+      "task": "261030-031614-76c06cd02c",
+      "model": "openrouter",
+      "project": "trials",
+      "title": "config on open/openrouter (config)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 10,
+      "turns": 1,
+      "review_rounds": 0
     }
   ]
 }
