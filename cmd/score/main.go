@@ -17,6 +17,12 @@
 //
 // because the score check's sandbox can't call it. -v also lists how each
 // cell's trials went: outcome, reason, cost, minutes and turns.
+//
+// A trial lands its code sealed, each file zipped by
+//
+//	go run ./cmd/score -seal trials/<harness>/<model>/<task>
+//
+// so a later trial of the same task can't read it in its checkout.
 package main
 
 import (
@@ -68,10 +74,12 @@ type Trial struct {
 }
 
 // Ledger is what the score reads from `hive agent models`: the named models
-// and the trials.
+// and the trials, plus the worker record fields (demoted, etc.).
 type Ledger struct {
-	Models map[string]string `json:"models"`
-	Trials []Trial           `json:"trials"`
+	Models  map[string]string   `json:"models"`
+	Trials  []Trial             `json:"trials"`
+	Demoted []string            `json:"demoted,omitempty"`
+	Routes  map[string][]string `json:"routes,omitempty"`
 }
 
 // Task is one task of the fixed set: its folder under tasks/ and its name in
@@ -223,15 +231,19 @@ func Score(cells []Cell, landed func(Cell) bool, judge func(Cell) Verdict) (floa
 }
 
 // Judge runs the acceptance tests in root/tasks/<task> against the cell's
-// code in root/<c.Dir()>: its non-test .go files, in a module of its own, so
-// the trial's own tests play no part. The acceptance tests build only with
-// the acceptance tag (tasks/ holds no answer for them to build against on
-// main), so Judge sets it. A cell with no code there didn't run. An error is the score's own fault (no
-// go, no temp dir), not the trial's.
+// code in root/<c.Dir()>: its non-test Go files, sealed or plain (see
+// Code), in a module of its own, so the trial's own tests play no part. The
+// acceptance tests build only with the acceptance tag (tasks/ holds no
+// answer for them to build against on main), so Judge sets it. A cell with
+// no code there didn't run. An error is the score's own fault (no go, no
+// temp dir, a sealed file that won't unzip), not the trial's.
 func Judge(root string, c Cell) (Verdict, error) {
-	code, err := goFiles(filepath.Join(root, c.Dir()), false)
-	if err != nil || len(code) == 0 {
+	code, err := Code(filepath.Join(root, c.Dir()))
+	if os.IsNotExist(err) || len(code) == 0 {
 		return Verdict{}, nil
+	}
+	if err != nil {
+		return Verdict{}, err
 	}
 	tests, err := Acceptance(filepath.Join(root, "tasks", c.Task))
 	if err != nil {
@@ -242,12 +254,8 @@ func Judge(root string, c Cell) (Verdict, error) {
 		return Verdict{}, err
 	}
 	defer os.RemoveAll(dir)
-	for _, f := range code {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			return Verdict{}, err
-		}
-		if err := os.WriteFile(filepath.Join(dir, filepath.Base(f)), b, 0o644); err != nil {
+	for name, b := range code {
+		if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
 			return Verdict{}, err
 		}
 	}
@@ -301,24 +309,130 @@ func Acceptance(dir string) (map[string][]byte, error) {
 			}
 			out[n] = b
 		case strings.HasSuffix(n, "_test.go.gz"):
-			f, err := os.Open(filepath.Join(dir, n))
+			b, err := gunzip(filepath.Join(dir, n))
 			if err != nil {
 				return nil, err
 			}
-			z, err := gzip.NewReader(f)
-			if err == nil {
-				var b []byte
-				if b, err = io.ReadAll(z); err == nil {
-					out[strings.TrimSuffix(n, ".gz")] = b
-				}
-			}
-			f.Close()
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", n, err)
-			}
+			out[strings.TrimSuffix(n, ".gz")] = b
 		}
 	}
 	return out, nil
+}
+
+// Code is a trial folder's code by file name: its non-test .go files, and
+// its sealed ones (a .go.gz, see Seal), unzipped.
+func Code(dir string) (map[string][]byte, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]byte{}
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || strings.HasSuffix(n, "_test.go") || strings.HasSuffix(n, "_test.go.gz") {
+			continue
+		}
+		var b []byte
+		switch {
+		case strings.HasSuffix(n, ".go"):
+			b, err = os.ReadFile(filepath.Join(dir, n))
+		case strings.HasSuffix(n, ".go.gz"):
+			b, err = gunzip(filepath.Join(dir, n))
+			n = strings.TrimSuffix(n, ".gz")
+		default:
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out[n] = b
+	}
+	return out, nil
+}
+
+// Seal zips each .go file in a trial folder (its tests too) into a .go.gz
+// beside it and removes the plain one, so the next trial of the same task
+// can't read or grep this one's answer in its checkout; the score unzips
+// them to judge. The zip carries no name or time, so sealing the same code
+// twice gives the same bytes.
+func Seal(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || !strings.HasSuffix(n, ".go") {
+			continue
+		}
+		path := filepath.Join(dir, n)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var z bytes.Buffer
+		w, _ := gzip.NewWriterLevel(&z, gzip.BestCompression)
+		w.Write(b)
+		if err := w.Close(); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path+".gz", z.Bytes(), 0o644); err != nil {
+			return err
+		}
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Plain are the folders under root/trials that hold plain .go files, each
+// relative to root (say "trials/open/m/wc"), in order.
+func Plain(root string) []string {
+	seen := map[string]bool{}
+	var out []string
+	filepath.WalkDir(filepath.Join(root, "trials"), func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		dir, _ := filepath.Rel(root, filepath.Dir(path))
+		if !seen[dir] {
+			seen[dir] = true
+			out = append(out, filepath.ToSlash(dir))
+		}
+		return nil
+	})
+	sort.Strings(out)
+	return out
+}
+
+// CellOf is the cell whose trial writes to dir, trials/<harness>/<model>/<task>
+// (a model may have a slash in it, as opencode/big-pickle does).
+func CellOf(dir string) (Cell, bool) {
+	parts := strings.Split(filepath.ToSlash(dir), "/")
+	if len(parts) < 4 || parts[0] != "trials" {
+		return Cell{}, false
+	}
+	n := len(parts)
+	return Cell{Pick{parts[1], strings.Join(parts[2:n-1], "/")}, parts[n-1]}, true
+}
+
+// gunzip is the unzipped content of the file at path.
+func gunzip(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	z, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
+	b, err := io.ReadAll(z)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
+	return b, nil
 }
 
 // goFiles are dir's .go files: the tests, or the rest.
@@ -351,7 +465,7 @@ func TrialsOf(l Ledger, tasks []Task) map[Cell][]Trial {
 }
 
 // Save writes the models and this project's trials from `hive agent models`
-// output in r to path.
+// output in r to path. It keeps demoted and routes for the verbose summary.
 func Save(r io.Reader, path string) error {
 	var l Ledger
 	if err := json.NewDecoder(r).Decode(&l); err != nil {
@@ -383,6 +497,59 @@ func line(s string, n int) string {
 	return s
 }
 
+// WorkerRecord is a pick's standing from hive agent models across all projects.
+type WorkerRecord struct {
+	Pick          Pick
+	TrialsTotal   int
+	TrialsMerged  int
+	TrialsStopped int
+	TrialsBlocked int
+	TrialsDone    int
+	Demoted       bool
+	DeckPosition  int // 1-based index in the deck, 0 = not in deck
+}
+
+// workerRecord is p's worker record in l: its trials by outcome, whether
+// it is demoted and where it sits on the worker route.
+func workerRecord(l Ledger, p Pick) WorkerRecord {
+	wr := WorkerRecord{Pick: p}
+	for _, tr := range l.Trials {
+		// PickOf handles both named models and harness:model format
+		tp := PickOf(tr.Model, l.Models)
+		if tp.Harness == p.Harness && tp.Model == p.Model {
+			wr.TrialsTotal++
+			switch tr.Outcome {
+			case "merged":
+				wr.TrialsMerged++
+			case "stopped":
+				wr.TrialsStopped++
+			case "blocked":
+				wr.TrialsBlocked++
+			case "done":
+				wr.TrialsDone++
+			}
+		}
+	}
+	// Demoted if a demoted line names exactly this pick as its first word:
+	// "open:openrouter on deck goes after the rest of its worker route: ..."
+	for _, d := range l.Demoted {
+		if name, _, _ := strings.Cut(d, " "); name == p.String() {
+			wr.Demoted = true
+			break
+		}
+	}
+	// Check deck position (from routes.worker)
+	if routes, ok := l.Routes["worker"]; ok {
+		for i, r := range routes {
+			if r == p.String() {
+				wr.DeckPosition = i + 1
+				break
+			}
+		}
+	}
+	return wr
+}
+
 // why is the line of go test's output that says why it failed: the first
 // failing test or compile error, else its first line.
 func why(out string) string {
@@ -398,10 +565,24 @@ func main() {
 	save := flag.Bool("save", false, "save `hive agent models` output on stdin as the ledger")
 	verbose := flag.Bool("v", false, "list every cell: its verdict and how its trials went")
 	ledger := flag.String("ledger", "ledger.json", "the ledger snapshot")
+	seal := flag.Bool("seal", false, "seal the trial folders named as arguments, or every one holding plain code (see Seal), and exit")
 	flag.Parse()
 	fail := func(err error) {
 		fmt.Fprintln(os.Stderr, "score:", err)
 		os.Exit(1)
+	}
+	if *seal {
+		dirs := flag.Args()
+		if len(dirs) == 0 {
+			dirs = Plain(".")
+		}
+		for _, dir := range dirs {
+			if err := Seal(dir); err != nil {
+				fail(err)
+			}
+			fmt.Println("sealed", dir)
+		}
+		return
 	}
 	if *save {
 		if err := Save(os.Stdin, *ledger); err != nil {
@@ -442,12 +623,62 @@ func main() {
 				fmt.Printf("       %s\n", line(why(v.Out), 120))
 			}
 			if !Lands(trials[c]) {
-				if code, _ := goFiles(c.Dir(), false); len(code) > 0 {
+				if code, _ := Code(c.Dir()); len(code) > 0 {
 					fmt.Printf("       code in %s, but no trial of this cell landed it: not counted\n", c.Dir())
 				}
 			}
 			for _, t := range trials[c] {
 				fmt.Printf("       %s %s: %d min, %d turns, $%.2f: %s\n", t.Task, t.Outcome, t.Minutes, t.Turns, t.Cost, line(t.Reason, 100))
+			}
+		}
+
+		// Per-pick summary: trial verdicts vs worker record (from hive agent models)
+		fmt.Println()
+		fmt.Println("Per-pick trial verdicts vs worker record:")
+		picks := Picks(l.Models)
+		for _, p := range picks {
+			wr := workerRecord(l, p)
+			// Count trial verdicts for this pick
+			trialPass := 0
+			trialFail := 0
+			trialNoCode := 0
+			trialMergedCells := 0
+			for _, c := range cells {
+				if c.Pick == p && Lands(trials[c]) {
+					trialMergedCells++
+					v := vs[c]
+					if v.Ran {
+						if v.Pass {
+							trialPass++
+						} else {
+							trialFail++
+						}
+					} else {
+						trialNoCode++
+					}
+				}
+			}
+			if trialMergedCells == 0 && wr.TrialsTotal == 0 {
+				fmt.Printf("  %s: no data\n", p)
+				continue
+			}
+			fmt.Printf("  %s: trials=%d(merged=%d stopped=%d blocked=%d done=%d) demoted=%v deck=%d\n",
+				p, wr.TrialsTotal, wr.TrialsMerged, wr.TrialsStopped, wr.TrialsBlocked, wr.TrialsDone, wr.Demoted, wr.DeckPosition)
+			if trialMergedCells > 0 {
+				fmt.Printf("       trial verdicts: %d merged cells, %d pass, %d fail, %d no-code\n",
+					trialMergedCells, trialPass, trialFail, trialNoCode)
+				if trialFail > 0 {
+					fmt.Printf("       ^^^ %d merged cell(s) failed acceptance tests\n", trialFail)
+				} else if trialPass > 0 {
+					fmt.Printf("       all %d merged cell(s) pass\n", trialPass)
+				}
+			}
+			// Flag the gap: trials say pass but worker record shows demoted/blocked
+			if wr.Demoted && trialFail == 0 && trialPass > 0 {
+				fmt.Printf("       *** GAP: trials pass but demoted on deck\n")
+			}
+			if wr.TrialsBlocked > 0 && trialFail == 0 && trialPass > 0 {
+				fmt.Printf("       *** GAP: trials pass but %d blocked trial(s) in worker record\n", wr.TrialsBlocked)
 			}
 		}
 	}
