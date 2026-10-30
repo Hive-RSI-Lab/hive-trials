@@ -361,6 +361,17 @@
       "minutes": 114,
       "turns": 2,
       "review_rounds": 0
+    },
+    {
+      "task": "261030-031658-c7a2e36c7d",
+      "model": "open:laguna-free",
+      "project": "trials",
+      "title": "routeknob on open/laguna-free (routeknob)",
+      "outcome": "merged",
+      "cost": 0,
+      "minutes": 137,
+      "turns": 2,
+      "review_rounds": 0
     }
   ]
 }
