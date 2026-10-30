@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
@@ -201,6 +202,88 @@ func TestJudgeHidden(t *testing.T) {
 				t.Errorf("verdict = ran %v pass %v, want pass %v\n%s", v.Ran, v.Pass, tc.pass, v.Out)
 			}
 		})
+	}
+}
+
+// A sealed trial (its files zipped by Seal) is judged as its plain code is,
+// and sealing it again changes nothing.
+func TestJudgeSealed(t *testing.T) {
+	c := Cell{Pick{"open", "m"}, "wc"}
+	for _, tc := range []struct {
+		name string
+		code string
+		pass bool
+	}{
+		{"passes", "package wc\n\nfunc Count(s string) int { return len(s) }\n", true},
+		{"fails", "package wc\n\nfunc Count(s string) int { return 0 }\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := trial(t, c, map[string]string{"wc.go": tc.code, "wc_test.go": "package wc\n"})
+			dir := filepath.Join(root, c.Dir())
+			if err := Seal(dir); err != nil {
+				t.Fatal(err)
+			}
+			if plain, _ := filepath.Glob(filepath.Join(dir, "*.go")); len(plain) > 0 {
+				t.Errorf("plain code left after Seal: %v", plain)
+			}
+			first, _ := os.ReadFile(filepath.Join(dir, "wc.go.gz"))
+			if err := Seal(dir); err != nil {
+				t.Fatal(err)
+			}
+			if again, _ := os.ReadFile(filepath.Join(dir, "wc.go.gz")); !bytes.Equal(first, again) {
+				t.Errorf("sealing twice changed wc.go.gz")
+			}
+			v, err := Judge(root, c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !v.Ran || v.Pass != tc.pass {
+				t.Errorf("verdict = ran %v pass %v, want pass %v\n%s", v.Ran, v.Pass, tc.pass, v.Out)
+			}
+		})
+	}
+}
+
+// No landed trial's code sits plain on main: each is sealed, so a trial
+// can't read or grep another trial's answer to its task in its checkout.
+// A folder whose trial is still in flight (no trial of its cell has merged
+// in ledger.json) may be plain: its own PR, and main between its merge and
+// the seal workflow (.github/workflows/seal.yml) sealing it.
+func TestTrialsSealed(t *testing.T) {
+	raw, err := os.ReadFile("../../ledger.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var l Ledger
+	if err := json.Unmarshal(raw, &l); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := Tasks("../../tasks", "../../TASKS.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	trials := TrialsOf(l, tasks)
+	for _, dir := range Plain("../..") {
+		if c, ok := CellOf(dir); ok && Lands(trials[c]) {
+			t.Errorf("%s holds plain code another trial could copy, and its trial has landed: seal it with `go run ./cmd/score -seal %s` (.github/workflows/seal.yml does on main) and commit the .go.gz files", dir, dir)
+		}
+	}
+}
+
+func TestCellOf(t *testing.T) {
+	for _, tc := range []struct {
+		dir  string
+		want Cell
+		ok   bool
+	}{
+		{"trials/open/laguna-free/wc", Cell{Pick{"open", "laguna-free"}, "wc"}, true},
+		{"trials/opencode/opencode/big-pickle/gocache", Cell{Pick{"opencode", "opencode/big-pickle"}, "gocache"}, true},
+		{"trials/open/wc", Cell{}, false},
+		{"tasks/wc/x/y", Cell{}, false},
+	} {
+		if got, ok := CellOf(tc.dir); got != tc.want || ok != tc.ok {
+			t.Errorf("CellOf(%q) = %v %v, want %v %v", tc.dir, got, ok, tc.want, tc.ok)
+		}
 	}
 }
 

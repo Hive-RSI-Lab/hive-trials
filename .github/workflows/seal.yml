@@ -1,0 +1,42 @@
+name: seal
+# Seals each trial folder that landed plain code on main (go run ./cmd/score
+# -seal, each .go file zipped to a .go.gz), so no trial's answer sits readable
+# in a later trial's checkout. A trial's PR may land plain code; this seals it
+# right after the merge, with no hand step. TestTrialsSealed fails on a
+# landed trial left plain, should this not run.
+on:
+  push:
+    branches: [main]
+    paths: ['trials/**']
+  workflow_dispatch:
+concurrency:
+  group: seal
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  seal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: seal plain trial folders, and push
+        shell: bash
+        run: |
+          for try in 1 2 3; do
+            git fetch -q origin main && git reset -q --hard origin/main
+            if [ -z "$(find trials -name '*.go')" ]; then
+              echo "every trial folder is sealed"
+              exit 0
+            fi
+            go run ./cmd/score -seal
+            git add -A trials
+            git -c user.name=Hive -c user.email=hive@localhost commit -q -m "Seal the trial code that landed plain on main" -m "go run ./cmd/score -seal, run by .github/workflows/seal.yml"
+            git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1
