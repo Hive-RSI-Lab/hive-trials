@@ -269,6 +269,34 @@ func TestSave(t *testing.T) {
 	if strings.Contains(s, "deck") || strings.Contains(s, "agents") {
 		t.Errorf("saved ledger:\n%s", s)
 	}
+
+	// Save keeps demoted and routes (for the verbose summary), drops the rest
+	in2 := `{"agents": ["x"], "models": {"openrouter": "openrouter at somewhere"}, "trials": [
+		{"model": "openrouter", "project": "trials", "title": "wc", "outcome": "merged", "task": "1"}],
+		"demoted": ["open:openrouter on deck goes after the rest of its worker route: its last 2 worker tasks here ended blocked without a merge"],
+		"routes": {"worker": ["open:openrouter", "claude:opus"]},
+		"trials_running": ["something"],
+		"trials_not_counted": [],
+		"unavailable": {"foo": "bar"}}`
+	path2 := filepath.Join(t.TempDir(), "ledger2.json")
+	if err := Save(strings.NewReader(in2), path2); err != nil {
+		t.Fatal(err)
+	}
+	b2, _ := os.ReadFile(path2)
+	s2 := string(b2)
+	// demoted and routes survive
+	if !strings.Contains(s2, "demoted") || !strings.Contains(s2, "open:openrouter on deck") {
+		t.Errorf("saved ledger lost demoted:\n%s", s2)
+	}
+	if !strings.Contains(s2, "routes") || !strings.Contains(s2, "worker") || !strings.Contains(s2, "open:openrouter") {
+		t.Errorf("saved ledger lost routes:\n%s", s2)
+	}
+	// agents, trials_running, trials_not_counted, unavailable are dropped
+	for _, dropped := range []string{"agents", "trials_running", "trials_not_counted", "unavailable"} {
+		if strings.Contains(s2, dropped) {
+			t.Errorf("saved ledger kept %s:\n%s", dropped, s2)
+		}
+	}
 }
 
 func TestWorkerRecord(t *testing.T) {

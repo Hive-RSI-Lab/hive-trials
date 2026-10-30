@@ -344,7 +344,7 @@ func TrialsOf(l Ledger, tasks []Task) map[Cell][]Trial {
 }
 
 // Save writes the models and this project's trials from `hive agent models`
-// output in r to path.
+// output in r to path. It keeps demoted and routes for the verbose summary.
 func Save(r io.Reader, path string) error {
 	var l Ledger
 	if err := json.NewDecoder(r).Decode(&l); err != nil {
@@ -361,8 +361,6 @@ func Save(r io.Reader, path string) error {
 	}
 	l.Trials = kept
 	l.Agents = nil
-	l.Routes = nil
-	l.Demoted = nil
 	l.TrialsNotCounted = nil
 	l.TrialsRunning = nil
 	l.Unavailable = nil
