@@ -304,6 +304,17 @@
       "minutes": 453,
       "turns": 1,
       "review_rounds": 0
+    },
+    {
+      "task": "261030-014456-196a4704f7",
+      "model": "deepseek-v4-pro",
+      "project": "trials",
+      "title": "gocache on open/deepseek-v4-pro (gocache)",
+      "outcome": "merged",
+      "cost": 0.4813718892,
+      "minutes": 70,
+      "turns": 6,
+      "review_rounds": 0
     }
   ]
 }
