@@ -7,12 +7,22 @@ and `<model>` are the trial's pick (a named model like `gpt-oss-120b` runs on
 
 A trial writes only inside its own folder. It does not touch `go.mod`,
 `tasks/`, `.hive/`, `ledger.json` or another trial's folder, so two trials never collide.
-Its package is the one the task's tests name (`package lru`), in the root
-module, so it must build: main's `go test ./...` builds it.
+Its package is the one the task's tests name (`package lru`).
+
+Seal your folder before you land it:
+
+    go run ./cmd/score -seal trials/<harness>/<model>/<task>
+
+zips each `.go` file into a `.go.gz` beside it, which the score unzips to
+judge. Every other trial here is sealed the same way so no trial reads
+another's answer to its task: the `.go.gz` files of other folders are not
+yours to open, as a task's hidden tests aren't. `go test ./...` fails while
+your folder holds plain `.go` files, so build and test your code before you
+seal it (the README shows how to run the acceptance tests by hand).
 
 Land the attempt whether or not it passes: its verdict is whether it passes
 the acceptance tests in `tasks/<task>/`, which `go run ./cmd/score` runs
-against it. There is no reference answer in the repo to copy: write the
+against it. There is no reference answer in the repo to copy, and no other trial's: write the
 code from the task's description in `../TASKS.md` and its tests. A task on
 existing code (`gocache`, `config`) starts from the code in
 `../tasks/<task>/_start/`: copy it into your folder and change it there;

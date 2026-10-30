@@ -25,8 +25,11 @@ A scratch project for trying models and harnesses on small real tasks before rou
   - Example: `trials/open/deepseek-v4-pro/wc/`, `trials/codex/gpt-5/csvsum/`
   - A trial writes only under its own folder
   - A trial's verdict is whether this code passes the task's acceptance tests (see Score)
+  - A trial lands its code sealed: `go run ./cmd/score -seal trials/<harness>/<model>/<task>`
+    zips each `.go` file into a `.go.gz`, so a later trial of the same task can't read or
+    grep this one's answer in its checkout; `go test ./...` fails on plain code under `trials/`
 
-- **Main project tests** - Main runs `go test ./...` (the test command in `.hive/project.json`): the score's tests, and it builds every trial folder; the acceptance tests run only through the score
+- **Main project tests** - Main runs `go test ./...` (the test command in `.hive/project.json`): the score's tests, which fail on any trial code left unsealed; the acceptance tests run only through the score
 
 ## Tasks
 
@@ -138,8 +141,8 @@ on one task:
 A cell counts only when a ledger trial on its pick and task landed its code
 (its outcome is `merged`). Its verdict is then whether the code in
 `trials/<harness>/<model>/<task>/` passes the acceptance tests in
-`tasks/<task>/`: the score copies the folder's non-test `.go` files beside
-those tests (unzipping a hidden `_test.go.gz`) and runs `go test`. Pass or fail, it is a verdict. A trial that
+`tasks/<task>/`: the score copies the folder's non-test code beside those
+tests (unzipping its sealed `.go.gz` files and a hidden `_test.go.gz`) and runs `go test`. Pass or fail, it is a verdict. A trial that
 ended on a Hive fault (a 403 from the forge, closed by the lead, left open by
 the warden) landed nothing and gives none; nor does code in a cell's folder
 that no trial of that cell landed (written by hand, or by a trial on another
@@ -157,7 +160,7 @@ hive agent models | go run ./cmd/score -save   # writes ledger.json, prints the 
 go run ./cmd/score -v                           # every cell: pass, fail or none, unlanded code, and its trials' outcome, reason, minutes, turns, cost
 ```
 
-A trial's PR adds only its `trials/<harness>/<model>/<task>/` code and never
+A trial's PR adds only its `trials/<harness>/<model>/<task>/` code, sealed, and never
 edits `ledger.json`, which is refreshed from the record after the trial ends.
 
 Each new verdict (pass or fail) then goes to the knowledge base as a routing
@@ -183,6 +186,6 @@ To run a task's acceptance tests on a trial by hand, copy them beside its code
 and set the tag, as the score does:
 
 ```bash
-cp tasks/lru/*_test.go /tmp/t/ && cp trials/open/<model>/lru/*.go /tmp/t/   # then, in /tmp/t with a go.mod:
+cp tasks/lru/*_test.go /tmp/t/ && for f in trials/open/<model>/lru/*.go.gz; do gunzip -c $f > /tmp/t/$(basename $f .gz); done   # then, in /tmp/t with a go.mod:
 go test -race -tags acceptance .
 ```

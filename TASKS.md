@@ -257,3 +257,8 @@ two trials never touch the same files: `trials/open/gpt-oss-120b/lru/`,
 A trial's verdict is whether that code passes the task's acceptance tests:
 `go run ./cmd/score` runs `tasks/<task>/*_test.go` against it, so the
 trial's own tests, if any, don't decide it. See the README's Score.
+
+A trial lands its code sealed (`go run ./cmd/score -seal
+trials/<harness>/<model>/<task>`, each `.go` file zipped to a `.go.gz`), so
+no trial's answer sits readable in the next one's checkout; a sealed trial
+is another trial's answer key, not yours to open.

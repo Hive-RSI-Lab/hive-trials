@@ -204,6 +204,63 @@ func TestJudgeHidden(t *testing.T) {
 	}
 }
 
+// A sealed trial (its files zipped by Seal) is judged as its plain code is,
+// and sealing it again changes nothing.
+func TestJudgeSealed(t *testing.T) {
+	c := Cell{Pick{"open", "m"}, "wc"}
+	for _, tc := range []struct {
+		name string
+		code string
+		pass bool
+	}{
+		{"passes", "package wc\n\nfunc Count(s string) int { return len(s) }\n", true},
+		{"fails", "package wc\n\nfunc Count(s string) int { return 0 }\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := trial(t, c, map[string]string{"wc.go": tc.code, "wc_test.go": "package wc\n"})
+			dir := filepath.Join(root, c.Dir())
+			if err := Seal(dir); err != nil {
+				t.Fatal(err)
+			}
+			if plain, _ := filepath.Glob(filepath.Join(dir, "*.go")); len(plain) > 0 {
+				t.Errorf("plain code left after Seal: %v", plain)
+			}
+			first, _ := os.ReadFile(filepath.Join(dir, "wc.go.gz"))
+			if err := Seal(dir); err != nil {
+				t.Fatal(err)
+			}
+			if again, _ := os.ReadFile(filepath.Join(dir, "wc.go.gz")); !bytes.Equal(first, again) {
+				t.Errorf("sealing twice changed wc.go.gz")
+			}
+			v, err := Judge(root, c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !v.Ran || v.Pass != tc.pass {
+				t.Errorf("verdict = ran %v pass %v, want pass %v\n%s", v.Ran, v.Pass, tc.pass, v.Out)
+			}
+		})
+	}
+}
+
+// No trial's code sits plain on main: each is sealed, so a trial can't read
+// or grep another trial's answer to its task in its checkout.
+func TestTrialsSealed(t *testing.T) {
+	err := filepath.WalkDir("../../trials", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(path, ".go") {
+			dir, _ := filepath.Rel("../..", filepath.Dir(path))
+			t.Errorf("%s is plain code another trial could copy: seal its folder with `go run ./cmd/score -seal %s` and commit the .go.gz files", strings.TrimPrefix(path, "../../"), dir)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTasksFromRepo(t *testing.T) {
 	got, err := Tasks("../../tasks", "../../TASKS.md")
 	if err != nil {
