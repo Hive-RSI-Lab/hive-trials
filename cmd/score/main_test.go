@@ -352,6 +352,18 @@ func TestWorkerRecord(t *testing.T) {
 	if wr2.DeckPosition != 0 {
 		t.Errorf("DeckPosition = %d, want 0", wr2.DeckPosition)
 	}
+
+	// A demoted pick whose name starts with another's doesn't demote the shorter one
+	l3 := Ledger{
+		Models:  map[string]string{"openrouter": "x at y", "openrouter-big": "z at y"},
+		Demoted: []string{"open:openrouter-big on deck goes after the rest of its worker route: ..."},
+	}
+	if workerRecord(l3, Pick{"open", "openrouter"}).Demoted {
+		t.Errorf("open:openrouter demoted by open:openrouter-big's line")
+	}
+	if !workerRecord(l3, Pick{"open", "openrouter-big"}).Demoted {
+		t.Errorf("open:openrouter-big not demoted")
+	}
 }
 
 // A bug-fix task's starting code (tasks/<task>/_start, which go ignores) is

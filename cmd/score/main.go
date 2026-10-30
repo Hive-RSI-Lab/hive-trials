@@ -67,14 +67,10 @@ type Trial struct {
 // Ledger is what the score reads from `hive agent models`: the named models
 // and the trials, plus the worker record fields (demoted, etc.).
 type Ledger struct {
-	Models        map[string]string `json:"models"`
-	Trials        []Trial           `json:"trials"`
-	Demoted       []string          `json:"demoted,omitempty"`
-	Agents        []string          `json:"agents,omitempty"`
-	Routes        map[string][]string `json:"routes,omitempty"`
-	TrialsNotCounted []Trial        `json:"trials_not_counted,omitempty"`
-	TrialsRunning   []string         `json:"trials_running,omitempty"`
-	Unavailable     interface{}      `json:"unavailable,omitempty"`
+	Models  map[string]string   `json:"models"`
+	Trials  []Trial             `json:"trials"`
+	Demoted []string            `json:"demoted,omitempty"`
+	Routes  map[string][]string `json:"routes,omitempty"`
 }
 
 // Task is one task of the fixed set: its folder under tasks/ and its name in
@@ -360,10 +356,6 @@ func Save(r io.Reader, path string) error {
 		}
 	}
 	l.Trials = kept
-	l.Agents = nil
-	l.TrialsNotCounted = nil
-	l.TrialsRunning = nil
-	l.Unavailable = nil
 	b, err := json.MarshalIndent(l, "", "  ")
 	if err != nil {
 		return err
@@ -371,18 +363,29 @@ func Save(r io.Reader, path string) error {
 	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
-// WorkerRecord is a pick's standing from hive agent models across all projects.
-type WorkerRecord struct {
-	Pick            Pick
-	TrialsTotal     int
-	TrialsMerged    int
-	TrialsStopped   int
-	TrialsBlocked   int
-	TrialsDone      int
-	Demoted         bool
-	DeckPosition    int // 1-based index in the deck, 0 = not in deck
+// line is s's first line, at most n runes.
+func line(s string, n int) string {
+	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
+	if r := []rune(s); len(r) > n {
+		return string(r[:n-1]) + "…"
+	}
+	return s
 }
 
+// WorkerRecord is a pick's standing from hive agent models across all projects.
+type WorkerRecord struct {
+	Pick          Pick
+	TrialsTotal   int
+	TrialsMerged  int
+	TrialsStopped int
+	TrialsBlocked int
+	TrialsDone    int
+	Demoted       bool
+	DeckPosition  int // 1-based index in the deck, 0 = not in deck
+}
+
+// workerRecord is p's worker record in l: its trials by outcome, whether
+// it is demoted and where it sits on the worker route.
 func workerRecord(l Ledger, p Pick) WorkerRecord {
 	wr := WorkerRecord{Pick: p}
 	for _, tr := range l.Trials {
@@ -402,10 +405,10 @@ func workerRecord(l Ledger, p Pick) WorkerRecord {
 			}
 		}
 	}
-	// Check if demoted
+	// Demoted if a demoted line names exactly this pick as its first word:
+	// "open:openrouter on deck goes after the rest of its worker route: ..."
 	for _, d := range l.Demoted {
-		// d is like "open:openrouter on deck goes after the rest of its worker route: ..."
-		if len(d) >= len(p.String()) && d[:len(p.String())] == p.String() {
+		if name, _, _ := strings.Cut(d, " "); name == p.String() {
 			wr.Demoted = true
 			break
 		}
@@ -431,15 +434,6 @@ func why(out string) string {
 		}
 	}
 	return out
-}
-
-// line is s's first line, at most n runes.
-func line(s string, n int) string {
-	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
-	if r := []rune(s); len(r) > n {
-		return string(r[:n-1]) + "…"
-	}
-	return s
 }
 
 func main() {
