@@ -374,6 +374,18 @@
       "review_rounds": 0
     },
     {
+      "task": "261030-031705-c80dc6c5da",
+      "model": "open:laguna-free",
+      "project": "trials",
+      "title": "config on open/laguna-free (config)",
+      "outcome": "blocked",
+      "reason": "doesn't finish: it was nudged twice to call `hive agent finish`, and the turns after made no new commit and ended without it",
+      "cost": 0,
+      "minutes": 1573,
+      "turns": 9,
+      "review_rounds": 0
+    },
+    {
       "task": "261030-162627-4940854d8d",
       "model": "open:openrouter",
       "project": "trials",
