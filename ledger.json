@@ -374,6 +374,17 @@
       "review_rounds": 0
     },
     {
+      "task": "261030-162627-4940854d8d",
+      "model": "open:openrouter",
+      "project": "trials",
+      "title": "config on open/openrouter (config)",
+      "outcome": "done",
+      "cost": 0,
+      "minutes": 465,
+      "turns": 1,
+      "review_rounds": 0
+    },
+    {
       "task": "261030-162629-14adc8613e",
       "model": "deepseek-v4-pro",
       "project": "trials",
